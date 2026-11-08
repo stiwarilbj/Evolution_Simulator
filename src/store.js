@@ -13,7 +13,7 @@ const makeRun = setup => {
   return { id: crypto.randomUUID(), setup: copy(setup), revisions: [], created: Date.now(),
     summaries: [], checkpoints: [{ day: 0, ...initial }], latest: initial, partial: null }
 }
-const last = run => run.summaries.at(-1)?.day ?? 0
+const last = run => run?.summaries.at(-1)?.day ?? 0
 function recordDay(run, { day, checkpoint, summary }) {
   const checkpoints = day % 10 === 0 ? [...run.checkpoints, { day, ...checkpoint }] : run.checkpoints
   return { ...run, summaries: [...run.summaries, summary], latest: checkpoint, partial: null, checkpoints }
@@ -85,13 +85,21 @@ export const useLab = defineStore('lab', () => {
   let cursor = 0, previous = 0, remainder = 0, renderAt = 0
   let raf, initialised = false, waiting = null
   let persistQueue = Promise.resolve()
+  const unsavedRuns = new Map()
+
+  const savedRun = id => library.value.find(value => value.id === id)
+  function latestRun(value) {
+    return unsavedRuns.get(value.id) ?? savedRun(value.id) ?? value
+  }
 
   function persist(value = run.value) {
     if (!value) return
     const count = last(value)
+    unsavedRuns.set(value.id, value)
     persistQueue = persistQueue.then(() => saveRun(value)).then(() => {
       library.value = [...library.value.filter(r => r.id !== value.id), value]
       if (run.value?.id === value.id) saved.value = count
+      if (unsavedRuns.get(value.id) === value) unsavedRuns.delete(value.id)
     }).catch(() => { error.value = 'Local saving is unavailable. You can still export this run.' })
   }
 
@@ -237,6 +245,7 @@ export const useLab = defineStore('lab', () => {
     if (!canSwitch()) return false
     const sameRun = run.value?.id === value.id
     if (sameRun) value = run.value
+    else if (!newRun) value = latestRun(value)
     let restoredTrack
     if (run.value && !sameRun && restoreDay >= 1 && restoreDay <= last(value)) {
       replayDay.value = restoreDay
@@ -258,7 +267,7 @@ export const useLab = defineStore('lab', () => {
     waiting = null
     batch.value = null
     autoPrepare = false
-    if (!sameRun) saved.value = last(value)
+    if (!sameRun) saved.value = last(savedRun(value.id))
     selected.value = null
     following.value = false
     scope.value = 'all'
@@ -619,7 +628,7 @@ export const useLab = defineStore('lab', () => {
 
   function rename(value, name) {
     const active = run.value?.id === value.id
-    const source = active ? run.value : value
+    const source = active ? run.value : latestRun(value)
     const updated = { ...source, setup: { ...source.setup, name } }
     if (active) run.value = updated
     persist(updated)
@@ -631,6 +640,7 @@ export const useLab = defineStore('lab', () => {
       await persistQueue
       await deleteRun(id)
       library.value = library.value.filter(r => r.id !== id)
+      unsavedRuns.delete(id)
     } catch { error.value = 'Could not remove that saved run.' }
   }
 

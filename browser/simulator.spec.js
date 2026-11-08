@@ -33,6 +33,35 @@ function dayTile(page, day) {
   return page.getByRole('button', { name: new RegExp(`^Day ${day}, population`) })
 }
 
+async function openRunLibrary(page) {
+  await page.getByRole('button', { name: 'Run options' }).click()
+  await page.getByRole('button', { name: 'Run Library' }).click()
+}
+
+async function installSaveDelay(page) {
+  await page.addInitScript(() => {
+    const onComplete = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete')
+    const saves = window.saveTest = { hold: false, pending: [] }
+    Object.defineProperty(IDBTransaction.prototype, 'oncomplete', {
+      ...onComplete,
+      set(handler) {
+        onComplete.set.call(this, event => {
+          if (saves.hold && this.mode === 'readwrite') saves.pending.push(() => handler.call(this, event))
+          else handler.call(this, event)
+        })
+      },
+    })
+  })
+}
+
+async function releaseSaves(page) {
+  await page.evaluate(() => {
+    const saves = window.saveTest
+    saves.hold = false
+    for (const release of saves.pending.splice(0)) release()
+  })
+}
+
 async function addFoodPoint(page, day, plants) {
   await page.getByRole('button', { name: 'Add point', exact: true }).click()
   const row = page.locator('.schedule-row').last()
@@ -293,30 +322,14 @@ test('Trait Space keeps selections within the species filter and only loads whol
 })
 
 test('renaming the active run keeps days whose saves are still pending', async ({ page }) => {
-  await page.addInitScript(() => {
-    const onComplete = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete')
-    const saves = window.saveTest = { hold: false, pending: [] }
-    Object.defineProperty(IDBTransaction.prototype, 'oncomplete', {
-      ...onComplete,
-      set(handler) {
-        onComplete.set.call(this, event => {
-          if (saves.hold && this.mode === 'readwrite') saves.pending.push(() => handler.call(this, event))
-          else handler.call(this, event)
-        })
-      },
-    })
-  })
+  await installSaveDelay(page)
   await openSimulator(page)
   await startRun(page)
   const runOptions = page.getByRole('button', { name: 'Run options' })
   const closeDialog = page.getByRole('button', { name: 'Close dialog' })
   const library = page.getByRole('dialog', { name: 'Run Library' })
-  async function openLibrary() {
-    await runOptions.click()
-    await page.getByRole('button', { name: 'Run Library' }).click()
-  }
 
-  await openLibrary()
+  await openRunLibrary(page)
   const active = library.locator('article').filter({ hasText: 'Browser test run' })
   await expect(active).toContainText('Saved through Day 0')
   await closeDialog.click()
@@ -327,7 +340,7 @@ test('renaming the active run keeps days whose saves are still pending', async (
   await expect(batchStatus(page, 'Saved through')).toHaveText('Day 0')
   await page.getByRole('button', { name: 'Close', exact: true }).click()
 
-  await openLibrary()
+  await openRunLibrary(page)
   await active.getByText('Actions', { exact: true }).click()
   await active.getByRole('button', { name: 'Rename', exact: true }).click()
   await active.getByLabel('Name', { exact: true }).fill('Renamed field')
@@ -336,16 +349,52 @@ test('renaming the active run keeps days whose saves are still pending', async (
   await expect(runOptions).toHaveAttribute('title', 'Renamed field')
   await expect(dayTile(page, 3)).toBeVisible()
 
-  await page.evaluate(() => {
-    const saves = window.saveTest
-    saves.hold = false
-    for (const release of saves.pending.splice(0)) release()
-  })
-  await openLibrary()
+  await releaseSaves(page)
+  await openRunLibrary(page)
   await expect(library.locator('article').filter({ hasText: 'Renamed field' })).toContainText('Saved through Day 3')
   await page.reload()
   await expect(runOptions).toHaveAttribute('title', 'Renamed field')
   await expect(dayTile(page, 3)).toBeVisible()
+})
+
+test('resuming a run keeps completed days while saves are pending', async ({ page }) => {
+  await installSaveDelay(page)
+  await openSimulator(page)
+  await startRun(page, '10', () => page.getByLabel('Run name').fill('Other run'))
+  await startRun(page)
+  const library = page.getByRole('dialog', { name: 'Run Library' })
+  const original = library.locator('article').filter({ hasText: 'Browser test run' })
+  const other = library.locator('article').filter({ hasText: 'Other run' })
+  const runOptions = page.getByRole('button', { name: 'Run options' })
+  await openRunLibrary(page)
+  await expect(original).toContainText('Saved through Day 0')
+  await expect(other).toContainText('Saved through Day 0')
+  await page.getByRole('button', { name: 'Close dialog' }).click()
+
+  await page.evaluate(() => { window.saveTest.hold = true })
+  await quickThrough(page, 3)
+  await expect(batchStatus(page, 'Completed through')).toHaveText('Day 3')
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 0')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+
+  await openRunLibrary(page)
+  await other.getByRole('button', { name: 'Resume' }).click()
+  await expect(runOptions).toHaveAttribute('title', 'Other run')
+  await openRunLibrary(page)
+  await original.getByRole('button', { name: 'Resume' }).click()
+  await expect(runOptions).toHaveAttribute('title', 'Browser test run')
+  await expect(runOptions).toHaveText('Day 4 / 10 · Ready')
+  await expect(dayTile(page, 3)).toBeVisible()
+
+  await quickThrough(page, 4)
+  await expect(batchStatus(page, 'Completed in this batch')).toHaveText('1 of 1')
+  await expect(batchStatus(page, 'Completed through')).toHaveText('Day 4')
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 0')
+  await releaseSaves(page)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 4')
+  await page.reload()
+  await expect(dayTile(page, 3)).toBeVisible()
+  await expect(dayTile(page, 4)).toBeVisible()
 })
 
 test('a copied setup link keeps the shared settings after reload', async ({ page, context, browser }) => {

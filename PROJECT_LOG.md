@@ -15,3 +15,4 @@
 - Added a retry when replay reconstruction stops reporting progress. The current view stays available and long replays can keep working while they report progress.
 - Kept copied setup links in the address bar while their settings are open, so refreshing reloads the shared setup.
 - Added a retry for failed comparison replays that keeps the same runs and day selected.
+- Fixed Run Library resume so switching between runs keeps completed days that are still waiting to save.
