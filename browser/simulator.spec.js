@@ -144,6 +144,51 @@ test('the production build runs a new experiment and shows its charts @pages', a
   expect(problems).toEqual([])
 })
 
+test('World fits split windows and keeps its controls in full screen', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page)
+  const stats = page.getByRole('heading', { name: 'Current Generation Stats' })
+  const timeline = page.getByRole('button', { name: 'Day 1, live', exact: true })
+  const quick = page.getByRole('button', { name: 'Quick Sim', exact: true })
+  const view = page.getByRole('button', { name: 'View options' })
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 720, height: 540 },
+    { width: 512, height: 480 },
+    { width: 320, height: 420 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await expect(stats).toBeInViewport({ ratio: 1 })
+    await expect(timeline).toBeInViewport({ ratio: 1 })
+    await expect(quick).toBeInViewport({ ratio: 1 })
+    await expect.poll(() => page.evaluate(() => ({
+      width: document.documentElement.scrollWidth,
+      height: document.documentElement.scrollHeight,
+    }))).toEqual(viewport)
+  }
+
+  await view.click()
+  await page.getByRole('button', { name: 'Full screen', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement?.classList.contains('world'))).toBe(true)
+  await expect(stats).toBeInViewport({ ratio: 1 })
+  await expect(timeline).toBeInViewport({ ratio: 1 })
+  await quick.click()
+  await expect(page.getByRole('dialog', { name: 'Quick Sim' })).toBeVisible()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
+  await view.click()
+  await page.getByRole('button', { name: 'Exit full screen' }).click()
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true)
+
+  const trends = page.getByRole('link', { name: 'Trends', exact: true })
+  await trends.click()
+  const food = page.getByRole('heading', { name: 'Food', exact: true })
+  await food.scrollIntoViewIfNeeded()
+  await expect(food).toBeInViewport({ ratio: 1 })
+  await expect(trends).toBeInViewport({ ratio: 1 })
+  expect(await page.evaluate(() => window.scrollY)).toBe(0)
+})
+
 test('Trends marks the food rules used on each completed day of a branch', async ({ page }) => {
   await openSimulator(page)
   await startRun(page, '10', async () => {

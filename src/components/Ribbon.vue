@@ -62,7 +62,7 @@ const firstExtinct = computed(() => rows.value.find(row => row?.population === 0
 function center(smooth, day = lab.viewing) {
   const sc = scroll.value, selected = sc?.querySelector('[data-day="'+day+'"]')
   if (!selected) return
-  const centerX = innerWidth/2 - sc.getBoundingClientRect().left
+  const centerX = Math.max(selected.offsetWidth/2,innerWidth/2 - sc.getBoundingClientRect().left)
   sc.scrollTo({ left:selected.offsetLeft + selected.offsetWidth/2 - centerX, behavior:smooth && !reducedMotion.matches ? 'smooth' : 'instant' })
 }
 watch(() => [lab.viewing, fold.value], () => nextTick(() => center(true)))

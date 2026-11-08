@@ -17,7 +17,7 @@ const pages = { viewer:'World', stats:'Trends', about:'About', compare:'Compare'
 const runAddress = /^#\/r\/([^/]+)\/s\/(\d+)\/(viewer|stats|about|compare)(\?.*)?$/
 const initialAddress = location.hash.match(runAddress)
 const initialPage = initialAddress?.[3] ?? 'viewer'
-const page = ref(initialPage), ready = ref(false), menu = ref(false), world = ref(), menuButton = ref()
+const page = ref(initialPage), ready = ref(false), menu = ref(false), world = ref(), menuButton = ref(), mainSurface = ref()
 const comparison = ref(readComparison(new URLSearchParams(initialAddress?.[4])))
 const comparisonVersion = ref(0), visited = ref({ viewer:true,[initialPage]:true })
 const scrolls = new Map()
@@ -55,12 +55,12 @@ function escapeMenu(event) {
 function show(view) {
   if (page.value===view) return
   if (page.value==='viewer' && view!=='viewer') lab.stopPlayback()
-  scrolls.set(page.value, window.scrollY)
+  scrolls.set(page.value, mainSurface.value?.scrollTop ?? 0)
   page.value = view
   visited.value[view] = true
   menu.value = false
   nextTick(() => {
-    if (page.value === view) window.scrollTo(0, scrolls.get(view) ?? 0)
+    if (page.value === view) mainSurface.value?.scrollTo(0, scrolls.get(view) ?? 0)
   })
 }
 function beginNavigation() {
@@ -264,7 +264,7 @@ onUnmounted(() => {
     <button v-else-if="lab.replayFailure" class="secondary" @click="retryReplay">Retry replay</button>
     <button v-else class="icon" aria-label="Dismiss error" @click="lab.error=''"><X :size="17"/></button>
   </div>
-  <div id="main-surface" tabindex="-1" :inert="!ready">
+  <div id="main-surface" ref="mainSurface" :class="{ 'reading-surface':page!=='viewer' }" tabindex="-1" :inert="!ready">
     <template v-if="lab.run">
       <World v-show="page==='viewer'" ref="world" @reroll="reroll"/>
       <Trends v-if="visited.stats" v-show="page==='stats'" @watch="watchDay" @sense="showSense" @restart="settings(lab.run.setup)" @reroll="reroll"/>

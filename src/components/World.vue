@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Aperture, BatteryMedium, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Ellipsis,
   Eye, FastForward, Layers, Pause, Play, Rabbit, RotateCcw, StepForward, Utensils, Video, X } from 'lucide-vue-next'
 import { useLab } from '../store.js'
@@ -13,7 +13,7 @@ import Ribbon from './Ribbon.vue'
 
 const lab = useLab()
 const emit = defineEmits(['reroll'])
-const board = ref(), section = ref()
+const board = ref(), surface = ref(), fullscreenActive = ref(false)
 const tool = ref(null), camera = ref('board'), quality = ref('auto'), details = ref(false)
 const eventFilter = ref('all')
 const dim = ref(false), hud = ref(false), rateReadout = ref(false), wasPlaying = ref(false)
@@ -81,11 +81,16 @@ function finishSeek() {
   wasPlaying.value = false
 }
 function fit() { camera.value='board'; lab.following=false; board.value?.fit(); tool.value=null }
-function fullscreen() {
-  if (document.fullscreenElement) document.exitFullscreen()
-  else section.value.requestFullscreen?.()
+async function fullscreen() {
   tool.value=null
+  try {
+    if (fullscreenActive.value) await document.exitFullscreen()
+    else await surface.value.requestFullscreen()
+  } catch { lab.error='Full screen is unavailable in this browser.' }
 }
+function updateFullscreen() { fullscreenActive.value = document.fullscreenElement === surface.value }
+onMounted(() => document.addEventListener('fullscreenchange', updateFullscreen))
+onBeforeUnmount(() => document.removeEventListener('fullscreenchange', updateFullscreen))
 function shortcuts(event) {
   if (lab.settings || lab.modal || /INPUT|BUTTON|SELECT|TEXTAREA|A/.test(event.target.tagName)) return
   if (event.code === 'Space') { event.preventDefault(); lab.play() }
@@ -108,8 +113,8 @@ watch(() => visible.value?.alive, alive => { if (alive===false) lab.following=fa
 defineExpose({ select, overhead:()=>{ lab.following=false; camera.value='overhead'; layers.value.sense=true } })
 </script>
 <template>
-  <main class="world" :class="{ 'is-following':lab.following, 'is-overhead':camera==='overhead' }" tabindex="-1" @keydown="shortcuts">
-    <section ref="section" class="stage" aria-label="Simulation field">
+  <main ref="surface" class="world" :class="{ 'is-following':lab.following, 'is-overhead':camera==='overhead' }" tabindex="-1" @keydown="shortcuts">
+    <section class="stage" aria-label="Simulation field">
       <Board ref="board" :frame="lab.frame" :species="lab.run.setup.species" :layers="layers" :selected="lab.selected"
         :follow="lab.following" :camera="camera" :scope="lab.scope" :dim="dim" :quality="quality" :speed-range="speedRange"
         @select="select" @fallback="fallback=true"/>
@@ -129,7 +134,7 @@ defineExpose({ select, overhead:()=>{ lab.following=false; camera.value='overhea
         <template v-if="tool==='view'">
           <button @click="fit">Fit board</button>
           <button @click="camera='overhead'; lab.following=false; tool=null">Overhead <span v-if="camera==='overhead'">✓</span></button>
-          <button @click="fullscreen">Full screen</button>
+          <button @click="fullscreen">{{ fullscreenActive ? 'Exit full screen' : 'Full screen' }}</button>
           <button @click="details=!details; tool=null">Creatures</button>
           <label>Graphics <select v-model="quality"><option value="auto">Auto</option><option value="full">Full</option><option value="efficient">Efficient</option></select></label>
           <label><input v-model="dim" type="checkbox"> Dim other species</label>

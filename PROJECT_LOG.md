@@ -19,3 +19,4 @@
 - Fixed the mutation profile menu so it shows the selected species' current trait settings.
 - Cleared the old species Undo when discarding a settings draft so it cannot add a duplicate.
 - Fixed Branch here so it offers earlier completed days while viewing the last day of a run.
+- Fit World, playback, stats, and the timeline inside short and split windows. Kept stats in full screen and moved longer pages into their own scroll area.
