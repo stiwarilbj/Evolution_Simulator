@@ -257,6 +257,31 @@ test('Constant food settings can start after shortening a scheduled run', async 
   await expect(page.getByRole('button', { name: 'Run options' })).toHaveText('Day 1 / 10 · Ready')
 })
 
+test('discarding a settings draft clears its species removal undo', async ({ page }) => {
+  await openSimulator(page)
+  await page.getByRole('button', { name: 'Simulation Settings' }).click()
+  const settings = page.getByRole('dialog', { name: 'Simulation Settings' })
+  const orange = settings.getByRole('button', { name: /^Orange/ })
+  const undo = settings.getByRole('button', { name: 'Undo', exact: true })
+  const remove = settings.getByRole('button', { name: 'Remove', exact: true })
+
+  await orange.click()
+  await settings.getByText('Species actions', { exact: true }).click()
+  await remove.click()
+  await expect(orange).toHaveCount(0)
+  await expect(undo).toBeVisible()
+  await settings.getByRole('button', { name: 'Discard changes', exact: true }).click()
+  await settings.getByRole('button', { name: 'Discard draft', exact: true }).click()
+  await expect(orange).toHaveCount(1)
+  await expect(undo).toHaveCount(0)
+
+  await orange.click()
+  await remove.click()
+  await expect(orange).toHaveCount(0)
+  await undo.click()
+  await expect(orange).toHaveCount(1)
+})
+
 test('mutation profiles follow the selected species and its trait switches', async ({ page }) => {
   await openSimulator(page)
   await page.getByRole('button', { name: 'Simulation Settings' }).click()

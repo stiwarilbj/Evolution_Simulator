@@ -77,6 +77,7 @@ async function copySeed() {
 function discard() {
   Object.assign(draft,JSON.parse(JSON.stringify(lab.run.setup)))
   tab.value=draft.species[0].id
+  savedSpecies.value=null
   issue.value={}
   discarding.value=false
 }
