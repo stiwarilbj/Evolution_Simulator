@@ -487,6 +487,42 @@ test('discarding a settings draft clears its species removal undo', async ({ pag
   await expect(orange).toHaveCount(1)
 })
 
+test('discarding edits to a duplicated run restores the duplicated setup', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page, '10', async () => {
+    await page.getByLabel('Run name').fill('Archive source')
+    await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('321')
+    await page.getByRole('spinbutton', { name: 'Random seed' }).fill('37')
+  })
+  await startRun(page)
+
+  await openRunLibrary(page)
+  const source = page.getByRole('dialog', { name: 'Run Library' }).locator('article').filter({ hasText: 'Archive source' })
+  await source.getByText('Actions', { exact: true }).click()
+  await source.getByRole('button', { name: 'Duplicate', exact: true }).click()
+
+  const settings = page.getByRole('dialog', { name: 'Simulation Settings' })
+  const name = settings.getByLabel('Run name')
+  const food = settings.getByRole('spinbutton', { name: 'Food', exact: true })
+  const discard = settings.getByRole('button', { name: 'Discard changes', exact: true })
+  await expect(name).toHaveValue('Archive source copy')
+  await expect(food).toHaveValue('321')
+  await expect(discard).toHaveCount(0)
+  await name.fill('Working title')
+  await food.fill('444')
+
+  await settings.getByRole('button', { name: 'Close settings' }).click()
+  await page.getByRole('button', { name: 'Simulation Settings' }).click()
+  await expect(name).toHaveValue('Working title')
+  await expect(food).toHaveValue('444')
+  await discard.click()
+  await settings.getByRole('button', { name: 'Discard draft', exact: true }).click()
+  await expect(name).toHaveValue('Archive source copy')
+  await expect(food).toHaveValue('321')
+  await expect(settings.getByRole('spinbutton', { name: 'Random seed' })).toHaveValue('37')
+  await expect(discard).toHaveCount(0)
+})
+
 test('mutation profiles follow the selected species and its trait switches', async ({ page }) => {
   await openSimulator(page)
   await page.getByRole('button', { name: 'Simulation Settings' }).click()

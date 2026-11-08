@@ -29,3 +29,4 @@
 - Canceling Quick Sim now leaves a finished replay at the end and still resumes live playback if the dialog paused it.
 - Fixed Trends so chart shortcuts and the pinned summary respect the selected day range. A pin appears again when its day is back in view.
 - Switching runs during Quick Sim now lets the current day finish so its results are saved with the old run.
+- Discarding settings edits now restores the setup the draft started from, including copies of saved runs and imported setups.

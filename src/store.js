@@ -63,6 +63,8 @@ export const useLab = defineStore('lab', () => {
   const workerReady = ref(false), connecting = ref(false), workerError = ref('')
   const selected = ref(null), following = ref(false)
   const settings = ref(false), draft = ref(null), modal = ref(null), targetDay = ref(null), branchFrom = ref(null)
+  let openingDraft
+  const draftChanged = computed(() => draft.value != null && JSON.stringify(draft.value) !== openingDraft)
   const downloadRange = shallowRef(null)
   const completed = computed(() => run.value ? last(run.value) : 0)
   const latestBranchDay = computed(() => Math.min(completed.value, (run.value?.setup.days ?? 1) - 1))
@@ -604,10 +606,17 @@ export const useLab = defineStore('lab', () => {
   function openSettings(setup, from = null) {
     if (!settings.value) restorePlay = playing.value
     stopPlayback()
-    if (setup || !draft.value || branchFrom.value != null) draft.value = copy(setup ?? run.value?.setup ?? starter())
+    if (setup || !draft.value || branchFrom.value != null) {
+      openingDraft = JSON.stringify(setup ?? run.value?.setup ?? starter())
+      draft.value = JSON.parse(openingDraft)
+    }
     branchFrom.value = from
     settings.value = true
     modal.value = null
+  }
+
+  function resetDraft() {
+    if (draft.value) Object.assign(draft.value, JSON.parse(openingDraft))
   }
 
   function closeSettings() {
@@ -688,6 +697,6 @@ export const useLab = defineStore('lab', () => {
   return { run, library, frame, viewing, liveFrame, liveDay, replay, playing, rate, through, scope, loading, batch, saved,
     error, workerReady, connecting, workerError, retrySimulation, replayDay, replayFailure, cancelReplay, retryReplay,
     canEnterLive, canMoveNext, selected, following, settings, draft, modal, completed, latestBranchDay, displayDuration, status, init, openDay, goLive, seek, play,
-    stopPlayback, toggleThrough, stepOnce, moveDay, simulate, stopBatch, extend, openSettings, closeSettings, evolve, switchRun, rename,
+    stopPlayback, toggleThrough, stepOnce, moveDay, simulate, stopBatch, extend, openSettings, closeSettings, draftChanged, resetDraft, evolve, switchRun, rename,
     remove, getTrack, branch, prepareOrLive, targetDay, quickForDay, branchFrom, importBranch, preparePair, openDownload, downloadRange }
 })

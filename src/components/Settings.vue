@@ -31,7 +31,6 @@ const total = computed(() => draft.species.filter(s=>s.enabled).reduce((sum,s)=>
 const endurance = computed(() => selected.value.energy/cost(selected.value,draft))
 const swatches = { speed:'#9A5A57',size:'#44877C',sense:'#468298' }
 const labels = { speed:'Speed',size:'Size',sense:'Sense Range' }
-const updated = computed(() => JSON.stringify(draft)!==JSON.stringify(lab.run.setup))
 const titleErrors = computed(() => Object.entries(issue.value).map(([key,message])=>({key,message})))
 function add(copy=false) {
   const id = crypto.randomUUID()
@@ -75,7 +74,7 @@ async function copySeed() {
   catch { issue.value={ ...issue.value, clipboard:'Clipboard unavailable. Select the seed to copy it.' } }
 }
 function discard() {
-  Object.assign(draft,JSON.parse(JSON.stringify(lab.run.setup)))
+  lab.resetDraft()
   tab.value=draft.species[0].id
   savedSpecies.value=null
   issue.value={}
@@ -223,8 +222,8 @@ onMounted(()=>dialog.value.showModal())
       <footer class="settings-footer">
         <div v-if="titleErrors.length" class="settings-errors issue" tabindex="-1" role="alert"><p>Review the setup</p><ul><li v-for="error in titleErrors" :key="error.key">{{ error.message }}</li></ul></div>
         <p>{{ draft.species.filter(s=>s.enabled).length }} enabled species · {{ total }} founders · {{ total ? (draft.food/total).toFixed(2) : '—' }} plants per founder</p>
-        <p v-if="updated && fork==null" class="quiet">Draft has changes <button type="button" class="link" @click="discarding=true">Discard changes</button></p>
-        <p v-if="discarding">Restore the active setup? <button type="button" class="secondary" @click="discard">Discard draft</button> <button type="button" class="link" @click="discarding=false">Keep editing</button></p>
+        <p v-if="lab.draftChanged && fork==null" class="quiet">Draft has changes <button type="button" class="link" @click="discarding=true">Discard changes</button></p>
+        <p v-if="discarding">Restore the setup you opened? <button type="button" class="secondary" @click="discard">Discard draft</button> <button type="button" class="link" @click="discarding=false">Keep editing</button></p>
         <button type="submit" class="primary evolve" :disabled="applying">{{ fork==null ? 'Evolve!' : 'Create branch' }}</button>
         <small class="quiet">by natural selection</small>
       </footer>
