@@ -24,3 +24,4 @@
 - Kept the Mini line chart points centered above their generation tiles in short and split windows.
 - Closed focused Trends charts when leaving Trends so browser Back returns to usable World controls.
 - Kept cleared run choices empty when reloading Compare.
+- Turning off Play Through now cancels the automatic move to the next replay, even if it has started loading.

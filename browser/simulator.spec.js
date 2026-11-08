@@ -750,6 +750,39 @@ test('replay stops at the next live day and the saved results survive a reload',
   await expect(nextDay).toBeDisabled()
 })
 
+test('turning off Play Through cancels an automatic replay that is still loading', async ({ page }) => {
+  await delayReplays(page)
+  await openSimulator(page)
+  await startRun(page)
+  await quickThrough(page, 2)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 2')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await dayTile(page, 1).click()
+  await finishReplay(page, 1)
+
+  const runOptions = page.getByRole('button', { name: 'Run options' })
+  const through = page.getByRole('button', { name: 'Play through generations' })
+  const replayTime = page.getByRole('slider', { name: 'Replay time' })
+  await expect(runOptions).toHaveText('Day 1 / 10 · Replay')
+  await through.click()
+  await expect(through).toHaveAttribute('aria-pressed', 'true')
+  await replayTime.fill('9.9')
+  await page.getByRole('button', { name: 'Play', exact: true }).click()
+  await expect(page.getByText('Building replay for Day 2…')).toBeVisible()
+
+  await through.click()
+  await expect(page.getByRole('button', { name: 'Replay day', exact: true })).toBeEnabled()
+  await finishReplay(page, 2)
+  await expect(runOptions).toHaveText('Day 1 / 10 · Replay')
+  await expect(replayTime).toHaveValue('10')
+  await expect(through).toHaveAttribute('aria-pressed', 'false')
+
+  await page.getByRole('button', { name: 'Next day', exact: true }).click()
+  await expect(runOptions).toHaveText('Day 2 / 10 · Replay')
+  await expect(replayTime).toHaveValue('0')
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled()
+})
+
 test('stopping early reports the saved boundary and allows another batch', async ({ page }) => {
   await openSimulator(page)
   await startRun(page, '1000')

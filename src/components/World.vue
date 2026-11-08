@@ -171,7 +171,7 @@ defineExpose({ select, overhead:()=>{ lab.following=false; camera.value='overhea
       <div v-else-if="lab.frame && !living.length" class="stage-note"><strong>Extinction</strong><span>Day {{ lab.viewing }} · No living creatures</span></div>
       <span v-if="fallback" class="render-note" title="Canvas rendering is active">Canvas view</span>
       <div class="player">
-        <button class="icon through" title="Play through generations" aria-label="Play through generations" :aria-pressed="lab.through" @click="lab.through=!lab.through"><StepForward :size="20"/></button>
+        <button class="icon through" title="Play through generations" aria-label="Play through generations" :aria-pressed="lab.through" @click="lab.toggleThrough"><StepForward :size="20"/></button>
         <div class="transport" role="group" aria-label="Day playback">
           <button class="icon" title="Previous day" aria-label="Previous day" :disabled="lab.viewing<=1 || lab.loading" @click="lab.moveDay(-1)"><ChevronLeft :size="27"/></button>
           <button class="icon play" :title="transportLabel" :aria-label="transportLabel"

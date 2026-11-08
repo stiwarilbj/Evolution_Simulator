@@ -82,6 +82,7 @@ export const useLab = defineStore('lab', () => {
   })
   let writer, ticket = 0, cache = new Map(), track, epoch = 0, finishConnection
   let runRequest = 0, request = 0, batchViewRequest = 0
+  let playThroughRequest = null
   let pending = false, requestedDawn = false, autoPrepare = false, restorePlay = false
   let cursor = 0, previous = 0, remainder = 0, renderAt = 0
   let raf, initialised = false, waiting = null
@@ -400,6 +401,7 @@ export const useLab = defineStore('lab', () => {
   function cancelReplay() {
     ++request
     waiting = null
+    playThroughRequest = null
     replayDay.value = null
     replayFailure.value = null
   }
@@ -421,6 +423,7 @@ export const useLab = defineStore('lab', () => {
     if (!run.value || !Number.isInteger(day) || day < 1 || day > completed.value) return false
     const value = run.value
     const token = ++request
+    playThroughRequest = resume && replay.value ? token : null
     stopPlayback()
     replayFailure.value = null
     replayDay.value = day
@@ -433,7 +436,10 @@ export const useLab = defineStore('lab', () => {
       if (token === request) replayFailure.value = { day, time, resume }
       return false
     } finally {
-      if (token === request) replayDay.value = null
+      if (token === request) {
+        replayDay.value = null
+        playThroughRequest = null
+      }
     }
   }
 
@@ -447,6 +453,13 @@ export const useLab = defineStore('lab', () => {
     if (playing.value && !replay.value && writer && !batch.value) writer.postMessage({ type: 'checkpoint' })
     playing.value = false
     remainder = 0
+  }
+
+  function toggleThrough() {
+    through.value = !through.value
+    if (through.value) return
+    waiting = null
+    if (playThroughRequest === request) cancelReplay()
   }
 
   function goLive(restart = false) {
@@ -664,6 +677,6 @@ export const useLab = defineStore('lab', () => {
   return { run, library, frame, viewing, liveFrame, liveDay, replay, playing, rate, through, scope, loading, batch, saved,
     error, workerReady, connecting, workerError, retrySimulation, replayDay, replayFailure, cancelReplay, retryReplay,
     canEnterLive, canMoveNext, selected, following, settings, draft, modal, completed, latestBranchDay, displayDuration, status, init, openDay, goLive, seek, play,
-    stopPlayback, stepOnce, moveDay, simulate, stopBatch, extend, openSettings, closeSettings, evolve, switchRun, rename,
+    stopPlayback, toggleThrough, stepOnce, moveDay, simulate, stopBatch, extend, openSettings, closeSettings, evolve, switchRun, rename,
     remove, getTrack, branch, prepareOrLive, targetDay, quickForDay, branchFrom, importBranch, preparePair, openDownload, downloadRange }
 })
