@@ -270,7 +270,8 @@ onUnmounted(() => {
   <div id="main-surface" ref="mainSurface" :class="{ 'reading-surface':page!=='viewer' }" tabindex="-1" :inert="!ready">
     <template v-if="lab.run">
       <World v-show="page==='viewer'" ref="world" @reroll="reroll" @fullscreen-change="fullscreenSurface=$event"/>
-      <Trends v-if="visited.stats" v-show="page==='stats'" @watch="watchDay" @sense="showSense" @restart="settings(lab.run.setup)" @reroll="reroll"/>
+      <Trends v-if="visited.stats" v-show="page==='stats'" :active="page==='stats'"
+        @watch="watchDay" @sense="showSense" @restart="settings(lab.run.setup)" @reroll="reroll"/>
       <About v-if="page==='about'" @world="go('viewer')" @compare="openComparison"/>
       <Compare v-if="page==='compare'" :key="comparisonVersion" :initial="comparison" @change="comparisonChanged" @library="task('library')"/>
       <Settings v-if="lab.settings"/>

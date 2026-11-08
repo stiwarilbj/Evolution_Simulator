@@ -6,6 +6,7 @@ import { useLab } from '../store.js'
 import TrendPlot from './TrendPlot.vue'
 import TraitSpace from './TraitSpace.vue'
 
+const props = defineProps({ active: Boolean })
 const emit = defineEmits(['watch','sense','reroll','restart'])
 const lab=useLab()
 const range=ref('all'), from=ref(1), to=ref(50), pin=ref(null), focused=ref(null)
@@ -101,10 +102,13 @@ function customRange(a,b) { from.value=a; to.value=b; range.value='custom' }
 function downloadVisibleDays() {
   lab.openDownload({ start: rows.value[0]?.day ?? '', end: rows.value.at(-1)?.day ?? '' })
 }
+watch(() => props.active, active => {
+  if (!active) focused.value = null
+})
 watch(focused, async key=>{
   if(!key) { focusDialog.value?.close(); return }
   await nextTick()
-  if(focused.value && !focusDialog.value?.open) focusDialog.value?.showModal()
+  if(props.active && focused.value && !focusDialog.value?.open) focusDialog.value?.showModal()
 })
 </script>
 <template>

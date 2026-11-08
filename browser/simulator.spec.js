@@ -215,6 +215,35 @@ test('Mini line points stay above their generation tiles when the window shrinks
   }
 })
 
+test('browser Back closes a focused Trends chart and restores World controls', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page)
+  await quickThrough(page, 3)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+
+  const worldUrl = page.url()
+  await page.getByRole('link', { name: 'Trends', exact: true }).click()
+  const trendsUrl = page.url()
+  const focus = page.getByRole('button', { name: 'Focus Population', exact: true })
+  const dialog = page.getByRole('dialog', { name: 'Focused chart' })
+  await focus.click()
+  await expect(dialog).toBeVisible()
+
+  await page.goBack()
+  await expect(page).toHaveURL(worldUrl)
+  await expect(dialog).toBeHidden()
+  await page.getByRole('button', { name: 'Quick Sim', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Quick Sim' })).toBeVisible()
+  await page.getByRole('button', { name: 'Close dialog' }).click()
+
+  await page.goForward()
+  await expect(page).toHaveURL(trendsUrl)
+  await expect(dialog).toBeHidden()
+  await focus.click()
+  await expect(dialog).toBeVisible()
+})
+
 test('Trends marks the food rules used on each completed day of a branch', async ({ page }) => {
   await openSimulator(page)
   await startRun(page, '10', async () => {
