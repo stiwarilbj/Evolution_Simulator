@@ -105,7 +105,7 @@ async function createBranch(edit=false) {
     schedule: [],
   }
   if(edit) { lab.openSettings(setup,branchDay.value); return }
-  try { await lab.branch(branchDay.value,setup); emit('world') }
+  try { if (await lab.branch(branchDay.value,setup)) emit('world') }
   catch(error){message.value=error.message}
 }
 onMounted(()=>dialog.value.showModal())

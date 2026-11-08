@@ -657,6 +657,59 @@ test('resuming a run keeps completed days while saves are pending', async ({ pag
   await expect(dayTile(page, 4)).toBeVisible()
 })
 
+test('switching runs saves the day Quick Sim was working on', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker
+    const batch = window.switchTest = { hold: false, release: null, stopping: false }
+    window.Worker = class extends NativeWorker {
+      postMessage(data) {
+        if (data.type === 'batch' && batch.hold) {
+          batch.hold = false
+          batch.release = () => {
+            batch.release = null
+            super.postMessage(data)
+            if (batch.stopping) super.postMessage({ type: 'stop' })
+          }
+          return
+        }
+        if (data.type === 'stop' && batch.release) {
+          batch.stopping = true
+          return
+        }
+        return super.postMessage(data)
+      }
+    }
+  })
+  await openSimulator(page)
+  await startRun(page, '10', () => page.getByLabel('Run name').fill('Other run'))
+  await startRun(page)
+  const runOptions = page.getByRole('button', { name: 'Run options' })
+  const library = page.getByRole('dialog', { name: 'Run Library' })
+  const original = library.locator('article').filter({ hasText: 'Browser test run' })
+  const other = library.locator('article').filter({ hasText: 'Other run' })
+  await page.evaluate(() => { window.switchTest.hold = true })
+  await quickThrough(page, 5)
+  await page.getByRole('button', { name: 'Hide progress', exact: true }).click()
+
+  await openRunLibrary(page)
+  await other.getByRole('button', { name: 'Resume', exact: true }).click()
+  await expect(runOptions).toHaveText('Day 1 / 10 · Stopping batch')
+  await expect(runOptions).toHaveAttribute('title', 'Browser test run')
+  expect(await page.evaluate(() => window.switchTest.stopping)).toBe(true)
+  await page.evaluate(() => window.switchTest.release())
+  await expect(runOptions).toHaveAttribute('title', 'Other run')
+
+  await openRunLibrary(page)
+  await expect(original).toContainText('Saved through Day 1')
+  await original.getByRole('button', { name: 'Resume', exact: true }).click()
+  await expect(runOptions).toHaveText('Day 2 / 10 · Ready')
+  await expect(dayTile(page, 1)).toBeVisible()
+  await expect(page).toHaveURL(/\/s\/2\/viewer$/)
+  await page.reload()
+  await expect(runOptions).toHaveText('Day 2 / 10 · Ready')
+  await expect(dayTile(page, 1)).toBeVisible()
+})
+
 test('a copied setup link keeps the shared settings after reload', async ({ page, context, browser }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await openSimulator(page)

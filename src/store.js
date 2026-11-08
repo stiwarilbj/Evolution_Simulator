@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref, shallowRef } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { rulesFor, starter, validate, validateRevisions } from './engine/config.js'
 import { dawn, founders, snapshot } from './engine/simulation.js'
 import { DT, clamp } from './engine/geometry.js'
@@ -73,6 +73,7 @@ export const useLab = defineStore('lab', () => {
     (viewing.value === completed.value && canEnterLive.value))
   const status = computed(() => {
     if (loading.value) return 'Building replay'
+    if (batch.value?.stopping) return 'Stopping batch'
     if (!replay.value && batch.value) return 'Simulating'
     if (!replay.value && completed.value >= (run.value?.setup.days ?? Infinity)) return 'Finished'
     if (replay.value) return 'Replay'
@@ -205,7 +206,7 @@ export const useLab = defineStore('lab', () => {
     if (data.type === 'done') {
       const finished = batch.value
       const stopped = data.stopped && data.day < finished?.target
-      const prepare = autoPrepare && data.day === 1 && !data.stopped
+      const prepare = autoPrepare && data.day === 1 && !data.stopped && !finished?.stopping
       const mayShowReplay = batchViewRequest === request && !loading.value && !replay.value
       batch.value = null
       autoPrepare = false
@@ -231,7 +232,16 @@ export const useLab = defineStore('lab', () => {
     cancelReplay()
     const viewRequest = request
     stopPlayback()
-    if (run.value && writer && !batch.value) {
+    if (batch.value) {
+      await new Promise(resolve => {
+        const unwatch = watch(batch, active => {
+          if (active) return
+          unwatch()
+          resolve()
+        }, { flush: 'sync' })
+        stopBatch()
+      })
+    } else if (run.value && writer) {
       const oldWriter = writer
       if (!replay.value && liveFrame.value?.time > 0 && liveFrame.value.time < liveFrame.value.duration) {
         await new Promise(resolve => {
@@ -612,7 +622,7 @@ export const useLab = defineStore('lab', () => {
     if (fork != null && setup.days <= fork) issues.days = 'The run must continue beyond Day '+fork+'.'
     if (Object.keys(issues).length) return issues
     if (fork != null) {
-      try { await branch(fork,copy(setup)) }
+      try { if (!await branch(fork,copy(setup))) return {} }
       catch (e) { return { branch:e.message } }
     }
     settings.value = false
@@ -659,7 +669,7 @@ export const useLab = defineStore('lab', () => {
   }
 
   async function branch(day, setup) {
-    if (!run.value || day < 1 || day > completed.value || Object.keys(validate(setup)).length) return
+    if (!run.value || day < 1 || day > completed.value || Object.keys(validate(setup)).length) return false
     const base = run.value
     const opening = [...base.checkpoints].reverse().find(c => c.day <= day)
     const after = opening.day === day ? opening : (await getTrack(base, day)).checkpoint
@@ -670,8 +680,9 @@ export const useLab = defineStore('lab', () => {
         { day: day + 1, setup }],
     }
     modal.value = null
-    await useRun(value, true)
-    if (setup.mode === 'prepare' && day < setup.days) simulate(setup.days, 'Preparing')
+    const switched = await useRun(value, true)
+    if (switched && setup.mode === 'prepare' && day < setup.days) simulate(setup.days, 'Preparing')
+    return switched
   }
 
   return { run, library, frame, viewing, liveFrame, liveDay, replay, playing, rate, through, scope, loading, batch, saved,
