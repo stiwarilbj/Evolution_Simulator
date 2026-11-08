@@ -4,6 +4,7 @@ import { Aperture, BatteryMedium, ChevronDown, ChevronLeft, ChevronRight, Chevro
   Eye, FastForward, Layers, Pause, Play, Rabbit, RotateCcw, StepForward, Utensils, Video, X } from 'lucide-vue-next'
 import { useLab } from '../store.js'
 import { STATES } from '../engine/simulation.js'
+import { rulesFor } from '../engine/config.js'
 import { format } from '../engine/stats.js'
 import { cost, homePoints, radius, travel } from '../engine/geometry.js'
 import Board from './Board.vue'
@@ -26,6 +27,7 @@ const layerNames = [
 ]
 const visible = computed(() => lab.frame?.blobs.find(b => b.id===lab.selected))
 const species = computed(() => lab.run.setup.species.find(s => s.id===visible.value?.species))
+const rules = computed(() => rulesFor(lab.run.setup,lab.run.revisions,lab.frame?.day ?? lab.viewing))
 const cohort = computed(() => {
   const frame = lab.frame
   if (!frame || !visible.value) return {}
@@ -103,7 +105,7 @@ function eventName(e) {
 }
 watch(() => lab.run.id, () => { details.value=false; tool.value=null; fit() })
 watch(() => visible.value?.alive, alive => { if (alive===false) lab.following=false })
-defineExpose({ overhead:()=>{ lab.following=false; camera.value='overhead'; layers.value.sense=true } })
+defineExpose({ select, overhead:()=>{ lab.following=false; camera.value='overhead'; layers.value.sense=true } })
 </script>
 <template>
   <main class="world" :class="{ 'is-following':lab.following, 'is-overhead':camera==='overhead' }" tabindex="-1" @keydown="shortcuts">
@@ -207,8 +209,8 @@ defineExpose({ overhead:()=>{ lab.following=false; camera.value='overhead'; laye
           <small>{{ format(visible.energy,1) }} / {{ visible.capacity }} energy</small>
           <dl><template v-for="[name,value] in [
             ['Age',visible.age+' days'],['Food credits',visible.credits],['Speed',format(visible.speed)],['Size',format(visible.size)],
-            ['Sense range',format(visible.sense)],['Travel rate',format(travel(visible,lab.run.setup),1)+' units/s'],
-            ['Body radius',format(radius(visible.size),2)],['Energy cost',format(cost(visible,lab.run.setup),1)+'/s'],
+            ['Sense range',format(visible.sense)],['Travel rate',format(travel(visible,rules),1)+' units/s'],
+            ['Body radius',format(radius(visible.size),2)],['Energy cost',format(cost(visible,rules),1)+'/s'],
             ['Born', 'Day '+visible.born],['Parent',visible.parent ? '#'+visible.parent : 'Founder']
           ]" :key="name"><dt>{{ name }}</dt><dd>{{ value }}</dd></template></dl>
           <h3>Events</h3>

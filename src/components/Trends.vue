@@ -130,7 +130,7 @@ watch(focused, async key=>{
       <span>{{ lab.run.setup.name }} · Seed {{ lab.run.setup.seed }} · Through Day {{ lab.completed }}<span v-if="lab.batch" class="teal"> · Simulating</span></span>
       <div class="trend-tabs"><button v-for="name in ['Trends','Trait Space']" :key="name" class="secondary" :aria-pressed="tab===name" @click="tab=name">{{ name }}</button></div>
     </div>
-    <TraitSpace v-if="tab==='Trait Space'" :scope="lab.scope" @watch="(day,id)=>emit('watch',day,id)"/>
+    <TraitSpace v-if="tab==='Trait Space'" :scope="lab.scope" @watch="(day,id,options)=>emit('watch',day,id,options)"/>
     <template v-else>
       <div class="trend-options">
         <label>Spread <select v-model="spread"><option value="percentile">Percentiles</option><option value="sd">Walkthrough spread</option></select></label>

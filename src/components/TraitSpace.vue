@@ -70,6 +70,12 @@ const histogram=computed(()=>{
 })
 function down(event){gesture={x:event.clientX,y:event.clientY};event.currentTarget.setPointerCapture?.(event.pointerId)}
 function move(event){if(!gesture)return;angle.value+=(event.clientX-gesture.x)*.012;tilt.value=Math.min(1.28,Math.max(-.8,tilt.value+(event.clientY-gesture.y)*.008));gesture={x:event.clientX,y:event.clientY}}
+function watchCreature(){
+  const { id, state }=chosen.value
+  const newborn=state===7
+  const nextDay=newborn && day.value<lab.completed
+  emit('watch',nextDay ? day.value+1 : day.value,id,{ atEnd:newborn && !nextDay })
+}
 </script>
 <template>
   <section class="trait-space">
@@ -94,7 +100,7 @@ function move(event){if(!gesture)return;angle.value+=(event.clientX-gesture.x)*.
         <option value="">Choose</option><option v-for="b in cohort" :key="b.id" :value="b.id">{{ species[b.species]?.name }} #{{ b.id }}</option>
       </select></label>
       <p v-if="chosen">{{ format(chosen.speed) }} speed · {{ format(chosen.size) }} size · {{ format(chosen.sense) }} sense</p>
-      <button v-if="chosen" class="secondary" @click="emit('watch',chosen.state===7?Math.min(lab.completed,day+1):day,chosen.id)">Watch creature</button>
+      <button v-if="chosen" class="secondary" @click="watchCreature">Watch creature</button>
       <p class="quiet">{{ cohort.length }} living blobs at dusk. Rotate to inspect the axes.</p></aside>
     </div>
     <header><h3>Trait distribution</h3><label>Trait <select v-model="metric"><option value="speed">Speed</option><option value="size">Size</option><option value="sense">Sense Range</option></select></label>

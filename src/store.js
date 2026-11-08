@@ -605,8 +605,10 @@ export const useLab = defineStore('lab', () => {
   }
 
   function rename(value, name) {
-    const updated = { ...value, setup: { ...value.setup, name } }
-    if (run.value?.id === value.id) run.value = updated
+    const active = run.value?.id === value.id
+    const source = active ? run.value : value
+    const updated = { ...source, setup: { ...source.setup, name } }
+    if (active) run.value = updated
     persist(updated)
   }
 

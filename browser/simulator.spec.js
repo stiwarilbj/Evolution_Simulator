@@ -285,6 +285,137 @@ test('Trait Space keeps selections within the species filter and only loads whol
   expect(errors).toEqual([])
 })
 
+test('renaming the active run keeps days whose saves are still pending', async ({ page }) => {
+  await page.addInitScript(() => {
+    const onComplete = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete')
+    const saves = window.saveTest = { hold: false, pending: [] }
+    Object.defineProperty(IDBTransaction.prototype, 'oncomplete', {
+      ...onComplete,
+      set(handler) {
+        onComplete.set.call(this, event => {
+          if (saves.hold && this.mode === 'readwrite') saves.pending.push(() => handler.call(this, event))
+          else handler.call(this, event)
+        })
+      },
+    })
+  })
+  await openSimulator(page)
+  await startRun(page)
+  const runOptions = page.getByRole('button', { name: 'Run options' })
+  const closeDialog = page.getByRole('button', { name: 'Close dialog' })
+  const library = page.getByRole('dialog', { name: 'Run Library' })
+  async function openLibrary() {
+    await runOptions.click()
+    await page.getByRole('button', { name: 'Run Library' }).click()
+  }
+
+  await openLibrary()
+  const active = library.locator('article').filter({ hasText: 'Browser test run' })
+  await expect(active).toContainText('Saved through Day 0')
+  await closeDialog.click()
+  await page.evaluate(() => { window.saveTest.hold = true })
+  await quickThrough(page, 3)
+  await expect(page.getByRole('heading', { name: 'Simulation complete' })).toBeVisible()
+  await expect(batchStatus(page, 'Completed through')).toHaveText('Day 3')
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 0')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+
+  await openLibrary()
+  await active.getByText('Actions', { exact: true }).click()
+  await active.getByRole('button', { name: 'Rename', exact: true }).click()
+  await active.getByLabel('Name', { exact: true }).fill('Renamed field')
+  await active.getByRole('button', { name: 'Save', exact: true }).click()
+  await closeDialog.click()
+  await expect(runOptions).toHaveAttribute('title', 'Renamed field')
+  await expect(dayTile(page, 3)).toBeVisible()
+
+  await page.evaluate(() => {
+    const saves = window.saveTest
+    saves.hold = false
+    for (const release of saves.pending.splice(0)) release()
+  })
+  await openLibrary()
+  await expect(library.locator('article').filter({ hasText: 'Renamed field' })).toContainText('Saved through Day 3')
+  await page.reload()
+  await expect(runOptions).toHaveAttribute('title', 'Renamed field')
+  await expect(dayTile(page, 3)).toBeVisible()
+})
+
+test('Watch creature follows a newborn at dusk or at the next recorded dawn', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page, '10', () => page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('400'))
+  await quickThrough(page, 1)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
+  const close = page.getByRole('button', { name: 'Close', exact: true })
+  await close.click()
+  const trends = page.getByRole('link', { name: 'Trends', exact: true })
+  await trends.click()
+  await page.getByRole('button', { name: 'Trait Space', exact: true }).click()
+  const creatures = page.locator('.trait-space').getByRole('combobox', { name: /^Creature/ })
+  // Day 1 starts with 50 founders, so #51 is the first newborn.
+  await creatures.selectOption('51')
+  const watchCreature = page.getByRole('button', { name: 'Watch creature' })
+  const runOptions = page.getByRole('button', { name: 'Run options' })
+  const replayTime = page.getByRole('slider', { name: 'Replay time' })
+  const current = page.getByRole('button', { name: /CURRENT CREATURE.*#51/ })
+  await watchCreature.click()
+  await expect(runOptions).toHaveText('Day 1 / 10 · Replay')
+  await expect(replayTime).toHaveValue('10')
+  await expect(current).toBeVisible()
+  await current.click()
+  await expect(page.getByRole('button', { name: /Born to #/ })).toBeVisible()
+
+  await quickThrough(page, 2)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 2')
+  await close.click()
+  await trends.click()
+  await watchCreature.click()
+  await expect(runOptions).toHaveText('Day 2 / 10 · Replay')
+  await expect(replayTime).toHaveValue('0')
+  await expect(current).toBeVisible()
+})
+
+test('creature details use the movement and energy rules for the day being watched', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page, '10', async () => {
+    for (const [name, value] of [['Food', '400'], ['Size', '12'], ['Sense Range', '30'], ['Energy', '1000']]) {
+      await page.getByRole('spinbutton', { name, exact: true }).fill(value)
+    }
+  })
+  await quickThrough(page, 1)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
+  await page.getByRole('button', { name: 'Watch last day' }).click()
+  const runOptions = page.getByRole('button', { name: 'Run options' })
+  const details = page.getByRole('complementary', { name: 'Creature details' })
+  const travel = details.getByText('Travel rate', { exact: true }).locator('xpath=following-sibling::dd[1]')
+  const energy = details.getByText('Energy cost', { exact: true }).locator('xpath=following-sibling::dd[1]')
+  const follow = page.getByRole('button', { name: 'Follow creature' })
+  const founder = page.getByRole('button', { name: /CURRENT CREATURE.*#1$/ })
+  await expect(runOptions).toHaveText('Day 1 / 10 · Replay')
+  await follow.click()
+  await founder.click()
+  await expect(travel).toHaveText('120.0 units/s')
+  await expect(energy).toHaveText('259.2/s')
+
+  await runOptions.click()
+  await page.getByRole('button', { name: 'Branch here', exact: true }).click()
+  await page.getByRole('button', { name: 'Edit branch rules' }).click()
+  await page.getByRole('button', { name: /^Advanced Rules/ }).click()
+  await page.getByRole('combobox', { name: /^Stride/ }).selectOption('speed')
+  await page.getByRole('combobox', { name: /^Energy model/ }).selectOption('additive')
+  await page.getByRole('button', { name: 'Create branch', exact: true }).click()
+  await expect(runOptions).toHaveText('Day 2 / 10 · Ready')
+  await follow.click()
+  await founder.click()
+  await expect(travel).toHaveText('100.0 units/s')
+  await expect(energy).toHaveText('172.8/s')
+
+  await page.getByRole('button', { name: 'Previous day', exact: true }).click()
+  await expect(runOptions).toHaveText('Day 1 / 10 · Replay')
+  await expect(travel).toHaveText('120.0 units/s')
+  await expect(energy).toHaveText('259.2/s')
+})
+
 test('replay stops at the next live day and the saved results survive a reload', async ({ page }) => {
   await openSimulator(page)
   await startRun(page)

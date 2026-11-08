@@ -123,22 +123,19 @@ async function applyAddress(hash = location.hash) {
   }
 }
 function handlePopState() { void applyAddress() }
-async function watchDay(day, id, sense = false) {
+async function watchDay(day, id, { sense = false, atEnd = false } = {}) {
   const token = beginNavigation()
   const current = () => token === routeRequest
   navigating = true
   lab.modal = null
   try {
-    if (day <= lab.completed && !await lab.openDay(day)) {
-      if (current() && lab.replayFailure) retryNavigation = { failure: lab.replayFailure, retry: () => watchDay(day, id, sense) }
+    if (day <= lab.completed && !await lab.openDay(day, atEnd ? Infinity : 0)) {
+      if (current() && lab.replayFailure) retryNavigation = { failure: lab.replayFailure, retry: () => watchDay(day, id, { sense, atEnd }) }
       return
     }
     if (!current()) return
     if (day > lab.completed && lab.replay) lab.goLive()
-    if (id != null && lab.frame?.blobs.some(blob => blob.alive && blob.id === id)) {
-      lab.selected = id
-      lab.following = true
-    }
+    if (id != null && lab.frame?.blobs.some(blob => blob.alive && blob.id === id)) world.value?.select(id)
     const changed = page.value !== 'viewer'
     show('viewer')
     if (changed) history.pushState(null,'',address())
@@ -151,7 +148,7 @@ async function watchDay(day, id, sense = false) {
     if (current()) navigating = false
   }
 }
-function showSense(day) { return watchDay(day, null, true) }
+function showSense(day) { return watchDay(day, null, { sense:true }) }
 function retryReplay() {
   if (retryNavigation?.failure === lab.replayFailure) void retryNavigation.retry()
   else void lab.retryReplay()
