@@ -871,7 +871,7 @@ for (const failure of ['constructor', 'timeout']) {
   })
 }
 
-test('retry after a crash keeps completed days and discards only uncheckpointed playback', async ({ page }) => {
+test('retry after a crash in full screen keeps completed days and restarts uncheckpointed playback', async ({ page }) => {
   await page.addInitScript(() => {
     const NativeWorker = window.Worker
     window.Worker = class extends NativeWorker {
@@ -887,6 +887,10 @@ test('retry after a crash keeps completed days and discards only uncheckpointed 
   await quickThrough(page, 3)
   await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
   await page.getByRole('button', { name: 'Close', exact: true }).click()
+  const view = page.getByRole('button', { name: 'View options' })
+  await view.click()
+  await page.getByRole('button', { name: 'Full screen', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement?.classList.contains('world'))).toBe(true)
   await page.getByRole('button', { name: 'Play', exact: true }).click()
   const elapsed = page.getByRole('progressbar', { name: 'Current day elapsed' })
   await expect.poll(async () => Number(await elapsed.getAttribute('aria-valuenow'))).toBeGreaterThan(0)
@@ -895,7 +899,11 @@ test('retry after a crash keeps completed days and discards only uncheckpointed 
     window.failedWriter.dispatchEvent(new Event('error'))
   })
   await expect(page.getByRole('alert')).toContainText('The unfinished day will restart')
-  await page.getByRole('button', { name: 'Retry simulation' }).click()
+  const retry = page.getByRole('button', { name: 'Retry simulation' })
+  await retry.click({ timeout: 5000 })
+  await expect(retry).toHaveCount(0)
+  await view.click()
+  await page.getByRole('button', { name: 'Exit full screen' }).click()
   await expect(page.getByRole('button', { name: 'Run options' })).toHaveText('Day 4 / 10 · Ready')
   await expect(elapsed).toHaveAttribute('aria-valuenow', '0')
   await page.evaluate(() => window.failedWriter.dispatchEvent(new MessageEvent('message', {

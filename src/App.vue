@@ -18,6 +18,7 @@ const runAddress = /^#\/r\/([^/]+)\/s\/(\d+)\/(viewer|stats|about|compare)(\?.*)
 const initialAddress = location.hash.match(runAddress)
 const initialPage = initialAddress?.[3] ?? 'viewer'
 const page = ref(initialPage), ready = ref(false), menu = ref(false), world = ref(), menuButton = ref(), mainSurface = ref()
+const fullscreenSurface = ref(null)
 const comparison = ref(readComparison(new URLSearchParams(initialAddress?.[4])))
 const comparisonVersion = ref(0), visited = ref({ viewer:true,[initialPage]:true })
 const scrolls = new Map()
@@ -256,17 +257,19 @@ onUnmounted(() => {
       </div>
     </div>
   </header>
-  <div v-if="lab.workerError || lab.replayFailure || lab.error" class="error-banner" role="alert">
-    <span>{{ lab.workerError || (lab.replayFailure ? 'Could not open the replay for Day '+lab.replayFailure.day+'.' : lab.error) }}</span>
-    <button v-if="lab.workerError" class="secondary" :disabled="lab.connecting" @click="lab.retrySimulation">
-      {{ lab.connecting ? 'Retrying…' : 'Retry simulation' }}
-    </button>
-    <button v-else-if="lab.replayFailure" class="secondary" @click="retryReplay">Retry replay</button>
-    <button v-else class="icon" aria-label="Dismiss error" @click="lab.error=''"><X :size="17"/></button>
-  </div>
+  <Teleport :to="fullscreenSurface || 'body'" :disabled="!fullscreenSurface">
+    <div v-if="lab.workerError || lab.replayFailure || lab.error" class="error-banner" role="alert">
+      <span>{{ lab.workerError || (lab.replayFailure ? 'Could not open the replay for Day '+lab.replayFailure.day+'.' : lab.error) }}</span>
+      <button v-if="lab.workerError" class="secondary" :disabled="lab.connecting" @click="lab.retrySimulation">
+        {{ lab.connecting ? 'Retrying…' : 'Retry simulation' }}
+      </button>
+      <button v-else-if="lab.replayFailure" class="secondary" @click="retryReplay">Retry replay</button>
+      <button v-else class="icon" aria-label="Dismiss error" @click="lab.error=''"><X :size="17"/></button>
+    </div>
+  </Teleport>
   <div id="main-surface" ref="mainSurface" :class="{ 'reading-surface':page!=='viewer' }" tabindex="-1" :inert="!ready">
     <template v-if="lab.run">
-      <World v-show="page==='viewer'" ref="world" @reroll="reroll"/>
+      <World v-show="page==='viewer'" ref="world" @reroll="reroll" @fullscreen-change="fullscreenSurface=$event"/>
       <Trends v-if="visited.stats" v-show="page==='stats'" @watch="watchDay" @sense="showSense" @restart="settings(lab.run.setup)" @reroll="reroll"/>
       <About v-if="page==='about'" @world="go('viewer')" @compare="openComparison"/>
       <Compare v-if="page==='compare'" :key="comparisonVersion" :initial="comparison" @change="comparisonChanged" @library="task('library')"/>

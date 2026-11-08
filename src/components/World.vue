@@ -12,7 +12,7 @@ import Flower from './Flower.vue'
 import Ribbon from './Ribbon.vue'
 
 const lab = useLab()
-const emit = defineEmits(['reroll'])
+const emit = defineEmits(['reroll', 'fullscreen-change'])
 const board = ref(), surface = ref(), fullscreenActive = ref(false)
 const tool = ref(null), camera = ref('board'), quality = ref('auto'), details = ref(false)
 const eventFilter = ref('all')
@@ -88,7 +88,10 @@ async function fullscreen() {
     else await surface.value.requestFullscreen()
   } catch { lab.error='Full screen is unavailable in this browser.' }
 }
-function updateFullscreen() { fullscreenActive.value = document.fullscreenElement === surface.value }
+function updateFullscreen() {
+  fullscreenActive.value = document.fullscreenElement === surface.value
+  emit('fullscreen-change', fullscreenActive.value ? surface.value : null)
+}
 onMounted(() => document.addEventListener('fullscreenchange', updateFullscreen))
 onBeforeUnmount(() => document.removeEventListener('fullscreenchange', updateFullscreen))
 function shortcuts(event) {
