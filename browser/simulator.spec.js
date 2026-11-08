@@ -6,10 +6,11 @@ async function openSimulator(page) {
   await page.goto('./')
 }
 
-async function startRun(page, days = '10') {
+async function startRun(page, days = '10', configure) {
   await page.getByRole('button', { name: 'Simulation Settings' }).click()
   await page.getByLabel('Run name').fill('Browser test run')
   await page.getByRole('spinbutton', { name: 'Days to run' }).fill(days)
+  await configure?.()
   await page.getByRole('button', { name: /^Watch live/ }).click()
   await page.getByRole('button', { name: 'Evolve!' }).click()
   await expect(page.getByRole('button', { name: 'Run options' })).toHaveText(`Day 1 / ${days} · Ready`)
@@ -30,6 +31,13 @@ function batchStatus(page, label) {
 
 function dayTile(page, day) {
   return page.getByRole('button', { name: new RegExp(`^Day ${day}, population`) })
+}
+
+async function addFoodPoint(page, day, plants) {
+  await page.getByRole('button', { name: 'Add point', exact: true }).click()
+  const row = page.locator('.schedule-row').last()
+  await row.getByRole('spinbutton', { name: 'Day', exact: true }).fill(String(day))
+  await row.getByRole('spinbutton', { name: 'Plants', exact: true }).fill(String(plants))
 }
 
 async function delayReplays(page) {
@@ -98,6 +106,97 @@ test('the production build runs a new experiment and shows its charts @pages', a
   await expect(page.locator('.trends canvas').first()).toBeVisible()
   expect(new URL(page.url()).pathname).toBe(app.pathname)
   expect(problems).toEqual([])
+})
+
+test('Trends marks the food rules used on each completed day of a branch', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page, '10', async () => {
+    await page.getByLabel('Food schedule').selectOption('step')
+    await addFoodPoint(page, 3, 25)
+    await addFoodPoint(page, 5, 45)
+    await addFoodPoint(page, 8, 90)
+  })
+  await quickThrough(page, 5)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 5')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  const trends = page.getByRole('link', { name: 'Trends', exact: true })
+  await trends.click()
+  const markers = page.locator('.trend-annotations span')
+  await expect(markers).toHaveText([/Day 3 · 25 plants/, /Day 5 · 45 plants/])
+
+  const runOptions = page.getByRole('button', { name: 'Run options' })
+  await runOptions.click()
+  await page.getByRole('button', { name: 'Branch here', exact: true }).click()
+  await page.getByLabel('Branch after day').fill('4')
+  await page.getByRole('button', { name: 'Edit branch rules' }).click()
+  await page.getByLabel('Food schedule').selectOption('step')
+  await addFoodPoint(page, 2, 70)
+  await addFoodPoint(page, 5, 70)
+  await page.getByRole('button', { name: 'Create branch', exact: true }).click()
+  await expect(runOptions).toHaveText('Day 5 / 10 · Ready')
+  await quickThrough(page, 6)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 6')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await trends.click()
+  await expect(markers).toHaveText([/Day 3 · 25 plants/, /Day 5 · Branch · 70 plants/])
+  await page.reload()
+  await expect(markers).toHaveText([/Day 3 · 25 plants/, /Day 5 · Branch · 70 plants/])
+})
+
+test('Trends downloads the filtered days and checks that CSV bounds are whole days', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page)
+  const trends = page.getByRole('link', { name: 'Trends', exact: true })
+  const download = page.getByRole('button', { name: 'Download', exact: true })
+  const dialog = page.getByRole('dialog', { name: 'Download' })
+  const confirmDownload = dialog.getByRole('button', { name: 'Download', exact: true })
+  await trends.click()
+  await download.click()
+  await expect(confirmDownload).toBeDisabled()
+  await dialog.getByRole('button', { name: 'Setup JSON' }).click()
+  await expect(confirmDownload).toBeEnabled()
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+
+  await quickThrough(page, 5)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 5')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByLabel('Filter By Species').selectOption('blue')
+  await page.getByRole('combobox', { name: /^Range/ }).selectOption('custom')
+  await page.getByRole('spinbutton', { name: 'From day' }).fill('2')
+  await page.getByRole('spinbutton', { name: 'To day' }).fill('3')
+  await download.click()
+  const from = dialog.getByLabel('From day')
+  await expect(dialog.getByLabel('Scope')).toHaveValue('blue')
+  await expect(from).toHaveValue('2')
+  await expect(dialog.getByLabel('Through day')).toHaveValue('3')
+  await from.fill('2.5')
+  await expect(confirmDownload).toBeDisabled()
+  await from.fill('2')
+  await expect(dialog.getByText('2 data rows')).toBeVisible()
+
+  const pendingDownload = page.waitForEvent('download')
+  await confirmDownload.click()
+  const file = await pendingDownload
+  expect(file.suggestedFilename()).toBe('evolution-results.csv')
+  const csv = await readFile(await file.path(), 'utf8')
+  const [header, ...data] = csv.split('\r\n').map(line => line.split(',').map(cell => cell.replaceAll('"', '')))
+  const dayIndex = header.indexOf('day'), scopeIndex = header.indexOf('scope')
+  expect(data.map(row => [row[dayIndex], row[scopeIndex]])).toEqual([['2', 'blue'], ['3', 'blue']])
+})
+
+test('Food and Births and Deaths can be hidden and restored by name', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page)
+  await page.getByRole('link', { name: 'Trends', exact: true }).click()
+  const titles = ['Food', 'Births and Deaths']
+  for (const title of titles) {
+    await page.getByRole('button', { name: `Hide ${title}`, exact: true }).click()
+    await expect(page.getByRole('heading', { name: title, exact: true })).toHaveCount(0)
+  }
+  for (const title of titles) {
+    await page.getByRole('button', { name: `+ ${title}`, exact: true }).click()
+    await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
+  }
 })
 
 test('replay stops at the next live day and the saved results survive a reload', async ({ page }) => {

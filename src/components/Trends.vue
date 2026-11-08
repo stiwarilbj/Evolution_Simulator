@@ -21,9 +21,27 @@ const rows=computed(()=>{
 })
 const pinned=computed(()=>pin.value ? lab.run.summaries[pin.value-1]?.rows[lab.scope] : null)
 const annotations=computed(()=>{
-  const food=lab.run.setup.scheduleMode==='constant'?[]:lab.run.setup.schedule.map(point=>({day:point.day,color:'#B7D65A',label:point.food+' plants'}))
-  const fork=lab.run.forkDay
-  return fork ? [{day:fork+1,color:'#83B3CE',label:'Branch'},...food] : food
+  const { setup, revisions, summaries } = lab.run
+  const rules = revisions.length ? revisions : [{ day: 1, setup }]
+  const branchDays = new Set()
+  const foodDays = new Set()
+  for (const [index, revision] of rules.entries()) {
+    if (revision.day > 1) branchDays.add(revision.day)
+    if (revision.setup.scheduleMode === 'constant') continue
+    const nextDay = rules[index + 1]?.day ?? Infinity
+    for (const point of revision.setup.schedule) {
+      if (point.day >= revision.day && point.day < nextDay) foodDays.add(point.day)
+    }
+  }
+  return summaries.flatMap(({ day, rows }, index) => {
+    const branch = branchDays.has(day)
+    const food = rows.all.food
+    const showFood = foodDays.has(day) || (branch && food !== summaries[index - 1]?.rows.all.food)
+    if (!branch && !showFood) return []
+    const label = branch ? ['Branch'] : []
+    if (showFood) label.push(`${food} plants`)
+    return [{ day, color: branch ? '#83B3CE' : '#B7D65A', label: label.join(' · ') }]
+  })
 })
 const basic=['population','age','speed','size','sense']
 const compactKey=computed(()=>basic.some(key=>key!=='population'&&!hidden.value.includes(key)))
@@ -55,13 +73,13 @@ const options=computed(()=>{
     series:METRICS.filter(metric=>!hidden.value.includes(metric.key)).map(metric=>line(metric.short,metric.color,r=>metricValue(r,metric.key),{
       axis:metric.key==='population'?'y1':'y',integer:metric.key==='population',dash:metric.key==='deathAge'?[3,3]:undefined
     }))}
-  charts.births={id:'births',title:'Births and Deaths',unit:'Births above zero · deaths below zero',legend:true,
+  charts.births={id:'births',title:'Births and Deaths',unit:'Births above zero · deaths below zero',legend:true,hideable:true,
     series:[line('Births','#A1BD67',r=>r.births,{bar:true,integer:true}),line('Deaths','#BD5558',r=>-r.deaths,{bar:true,integer:true}),
       line('Net','#FFFDFC',r=>r.net,{integer:true,area:'origin',fill:'#FFFDFC10'}),
       ...(causes.value?['Starvation','Missed home','Predation','Energy depletion'].map((cause,i)=>
         line(cause,['#F0B29F','#D89482','#EB7B72','#DDA66A'][i],r=>-(r.causes?.[cause]??0),{integer:true,dash:[3+i,3],width:1.3})):[])
     ]}
-  charts.food={id:'food',title:'Food',unit:'Resources per day',legend:true,series:[
+  charts.food={id:'food',title:'Food',unit:'Resources per day',legend:true,hideable:true,series:[
     line(lab.scope==='all'?'Food available':'Shared plant supply','#BDBAB0',r=>r.food,{dash:[4,3],integer:true,zero:true}),
     line('Food eaten','#B7D65A',r=>r.plants,{integer:true,area:'origin',fill:'#B7D65A12'}),
     line('Creatures eaten','#D38C80',r=>r.hunts,{dash:[6,3,2,3],integer:true})
@@ -80,6 +98,9 @@ function jump(event) {
 }
 function focus(key) { focused.value=focused.value===key?null:key }
 function customRange(a,b) { from.value=a; to.value=b; range.value='custom' }
+function downloadVisibleDays() {
+  lab.openDownload({ start: rows.value[0]?.day ?? '', end: rows.value.at(-1)?.day ?? '' })
+}
 watch(focused, async key=>{
   if(!key) { focusDialog.value?.close(); return }
   await nextTick()
@@ -95,7 +116,7 @@ watch(focused, async key=>{
         <select v-if="tab==='Trends'" aria-label="Jump to chart" @change="jump"><option value="">Jump to chart</option><option v-for="plot in options" :key="plot.id" :value="plot.id">{{ plot.title }}</option></select>
       </div>
       <div class="trend-actions">
-        <button class="secondary" @click="lab.modal='download'"><Download :size="17"/> Download</button>
+        <button class="secondary" @click="downloadVisibleDays"><Download :size="17"/> Download</button>
         <button class="icon" title="Run again" aria-label="Run again" @click="emit('restart')"><RotateCcw :size="17"/></button>
         <button class="icon" title="Reroll seed" aria-label="Reroll seed" @click="emit('reroll')"><Dices :size="17"/></button>
         <button class="icon" title="More Generations" aria-label="More Generations" @click="lab.modal='extend'"><Layers :size="17"/></button>
@@ -124,7 +145,7 @@ watch(focused, async key=>{
       <p v-if="annotations.length" class="trend-annotations quiet">
         <span v-for="a in annotations" :key="a.day+a.label" :style="{color:a.color}">┊ Day {{ a.day }} · {{ a.label }}</span>
       </p>
-      <div v-if="hidden.length" class="restore-plots"><button v-for="key in hidden" :key="key" class="secondary" @click="toggleHidden(key)">+ {{ titles[key] }}</button>
+      <div v-if="hidden.length" class="restore-plots"><button v-for="key in hidden" :key="key" class="secondary" @click="toggleHidden(key)">+ {{ options[key].title }}</button>
         <button class="link" @click="hidden=[]">Restore all</button></div>
       <div v-if="!rows.length" class="notice" role="status">{{ lab.completed?'Choose a different range.':'Complete Day 1 to see trends.' }}
         <button v-if="!lab.completed" class="secondary" @click="emit('watch',1)">Watch World</button></div>

@@ -20,6 +20,13 @@ const rows=computed(()=>lab.run.summaries.map(s=>s.rows[lab.scope]).filter(Boole
 const matches=computed(()=>[...lab.library].sort((a,b)=>b.created-a.created).filter(r=>r.setup.name.toLowerCase().includes(search.value.toLowerCase())))
 const canSim=computed(()=>Number.isInteger(finish.value)&&finish.value>=1&&finish.value<=lab.run.setup.days&&
   (mode.value==='absolute'||Number.isInteger(amount.value)&&amount.value>=0))
+const canExportCsv = computed(() => Number.isInteger(start.value) && Number.isInteger(end.value) &&
+  start.value >= 1 && start.value <= end.value && end.value <= lab.completed)
+const exportRowCount = computed(() => {
+  if (!canExportCsv.value) return 0
+  return lab.run.summaries.filter(day => day.day >= start.value && day.day <= end.value)
+    .reduce((total, { rows }) => total + (exportScope.value === '*' ? Object.keys(rows).length : Number(!!rows[exportScope.value])), 0)
+})
 const titles={quick:'Quick Sim','quick-progress':'Simulating generations','quick-done':'Simulation complete',
   'quick-stopped':'Simulation stopped',extend:'More Generations',
   library:'Run Library',download:'Download',table:'Generation statistics',branch:'Branch here'}
@@ -35,7 +42,12 @@ watch(()=>lab.modal,key=>{
   }
   if(key==='quick-progress' && lab.batch) { startProgress.value=lab.batch.start; endProgress.value=lab.batch.target }
   if(key==='extend') extension.value=Math.min(25,remaining.value)
-  if(key==='download') end.value=lab.completed
+  if(key==='download') {
+    start.value = lab.downloadRange?.start ?? 1
+    end.value = lab.downloadRange?.end ?? lab.completed
+    exportScope.value = lab.scope
+    lab.downloadRange = null
+  }
 },{immediate:true})
 function close() {
   if(lab.modal==='quick'&&wasPlaying.value&&!lab.playing) lab.play()
@@ -46,9 +58,11 @@ function simulate() {
   if(finish.value<=lab.completed) { const day=finish.value;lab.modal=null;emit('watch',day);return }
   if(lab.simulate(finish.value)) lab.modal='quick-progress'
 }
-function exportRun(run=lab.run) {
-  if(exportKind.value==='setup') download('evolution-setup.json','application/json',JSON.stringify({ setup:run.setup, revisions:run.revisions },null,2))
-  else download('evolution-results.csv','text/csv;charset=utf-8',csv(run,exportScope.value,start.value,end.value))
+function exportRun() {
+  if (exportKind.value === 'setup') setupDownload(lab.run)
+  else if (canExportCsv.value) download('evolution-results.csv', 'text/csv;charset=utf-8', csv(lab.run, exportScope.value, start.value, end.value))
+  else return
+  close()
 }
 function setupDownload(run) {
   download('evolution-setup.json','application/json',JSON.stringify({setup:run.setup,revisions:run.revisions},null,2))
@@ -136,10 +150,12 @@ onMounted(()=>dialog.value.showModal())
           <option v-for="s in lab.run.setup.species.filter(s=>s.enabled)" :key="s.id" :value="s.id">{{ s.name }}</option></select></label>
         <label class="dialog-field">From day <input type="number" v-model.number="start" min="1" :max="end"></label>
         <label class="dialog-field">Through day <input type="number" v-model.number="end" :min="start" :max="lab.completed"></label>
-        <p class="quiet">{{ lab.run.summaries.filter(d=>d.day>=start&&d.day<=end).reduce((n,d)=>n+(exportScope==='*'?Object.keys(d.rows).length:Number(!!d.rows[exportScope])),0) }} data rows</p>
+        <p class="quiet">{{ exportRowCount }} data rows</p>
+        <p v-if="!lab.completed" class="quiet">Complete a day to download results.</p>
+        <p v-else-if="!canExportCsv" class="issue">Choose whole days from 1 through {{ lab.completed }} in order.</p>
       </template>
       <p v-else class="quiet">Includes the seed, species, rules, and food schedule.</p>
-      <footer><button class="secondary" @click="close">Cancel</button><button class="primary" :disabled="exportKind==='csv'&&(!lab.completed||start<1||end<start||end>lab.completed)" @click="exportRun();close()"><Download :size="17"/> Download</button></footer>
+      <footer><button class="secondary" @click="close">Cancel</button><button class="primary" :disabled="exportKind==='csv'&&!canExportCsv" @click="exportRun"><Download :size="17"/> Download</button></footer>
     </template>
     <template v-else-if="lab.modal==='table'">
       <p class="quiet">{{ scopeLabel }} · Completed generations · Select a day to replay it</p>
@@ -147,7 +163,7 @@ onMounted(()=>dialog.value.showModal())
         <tbody><tr v-for="r in rows" :key="r.day"><td><button class="link" @click="lab.modal=null;emit('watch',r.day)">{{ r.day }}</button></td>
           <td v-for="m in METRICS" :key="m.key" :title="String(metricValue(r,m.key) ?? '')">{{ format(metricValue(r,m.key),m.key==='population'?0:2) }}</td></tr></tbody></table></div>
       <p v-if="!rows.length" class="quiet">Complete a generation to populate the table.</p>
-      <footer><button class="secondary" @click="lab.modal='download'">Download</button><button class="primary" @click="close">Done</button></footer>
+      <footer><button class="secondary" @click="lab.openDownload()">Download</button><button class="primary" @click="close">Done</button></footer>
     </template>
     <template v-else-if="lab.modal==='library'">
       <div class="library-tools"><input v-model="search" type="search" placeholder="Search runs" aria-label="Search runs">
