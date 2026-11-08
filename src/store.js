@@ -351,15 +351,27 @@ export const useLab = defineStore('lab', () => {
       if (!start) throw new Error('This day has no opening checkpoint.')
       const job = createWorker()
       const id = ++ticket
-      function fail() {
-        job.terminate()
-        reject(new Error('Replay reconstruction stopped.'))
+      let timeout
+      function watchForProgress() {
+        clearTimeout(timeout)
+        timeout = setTimeout(() => fail('Replay reconstruction timed out.'), 30_000)
       }
-      job.onerror = job.onmessageerror = fail
+      function cleanup() {
+        clearTimeout(timeout)
+        job.onmessage = job.onerror = job.onmessageerror = null
+        job.terminate()
+      }
+      function fail(message) {
+        cleanup()
+        reject(new Error(message))
+      }
+      const stopped = () => fail('Replay reconstruction stopped.')
+      job.onerror = job.onmessageerror = stopped
       job.onmessage = ({ data }) => {
         if (data.id !== id) return
-        job.terminate()
-        if (data.type === 'error') { reject(new Error(data.message)); return }
+        if (data.type === 'replay-progress') { watchForProgress(); return }
+        if (data.type === 'error') { fail(data.message); return }
+        cleanup()
         try {
           const result = prepareTrack(data.track)
           runCache.set(key, result)
@@ -367,10 +379,11 @@ export const useLab = defineStore('lab', () => {
           resolve(result)
         } catch (error) { reject(error) }
       }
+      watchForProgress()
       try {
         job.postMessage({ type: 'replay', id, setup: value.setup, records: value.revisions,
           start: start.day + 1, checkpoint: start, day })
-      } catch { fail() }
+      } catch { stopped() }
     })
   }
 

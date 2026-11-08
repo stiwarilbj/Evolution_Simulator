@@ -49,12 +49,19 @@ async function delayReplays(page) {
     window.Worker = class extends NativeWorker {
       postMessage(data) {
         if (data.type !== 'replay') return super.postMessage(data)
-        const receive = event => received.push(event.data.day ?? data.day)
+        const receive = event => {
+          if (event.data.type === 'replay-progress') return
+          received.push(event.data.day ?? data.day)
+          this.removeEventListener('message', receive)
+        }
         jobs.set(data.day, {
           release: () => {
-            this.addEventListener('message', receive, { once: true })
+            this.addEventListener('message', receive)
             super.postMessage(data)
           },
+          progress: () => this.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'replay-progress', id: data.id },
+          })),
           fail: () => this.dispatchEvent(new MessageEvent('message', {
             data: { type: 'error', id: data.id, message: 'Replay unavailable' },
           })),
@@ -518,6 +525,37 @@ test('a failed replay keeps the current day and can be retried', async ({ page }
   await finishReplay(page, 3)
   await expect(page).toHaveURL(/\/s\/3\/viewer$/)
   await expect(dayTile(page, 3)).toHaveAttribute('aria-current', 'true')
+})
+
+test('an unresponsive replay times out and can be retried', async ({ page }) => {
+  await delayReplays(page)
+  await page.clock.install()
+  await openSimulator(page)
+  await startRun(page)
+  await quickThrough(page, 3)
+  await page.getByRole('button', { name: 'Watch last day' }).click()
+  const loading = page.getByText('Building replay for Day 3…')
+  await expect(loading).toBeVisible()
+  await expect.poll(() => page.evaluate(() => window.replayTest.jobs.has(3))).toBe(true)
+
+  await page.clock.fastForward(20_000)
+  await page.evaluate(() => window.replayTest.jobs.get(3).progress())
+  await page.clock.fastForward(15_000)
+  await expect(loading).toBeVisible()
+
+  await page.clock.fastForward(15_001)
+  const retry = page.getByRole('button', { name: 'Retry replay' })
+  await expect(retry).toBeEnabled()
+  await expect(loading).toHaveCount(0)
+  await expect(page).toHaveURL(/\/s\/4\/viewer$/)
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled()
+
+  await page.evaluate(() => window.replayTest.jobs.delete(3))
+  await retry.click()
+  await finishReplay(page, 3)
+  await expect(page).toHaveURL(/\/s\/3\/viewer$/)
+  await expect(dayTile(page, 3)).toHaveAttribute('aria-current', 'true')
+  await expect(retry).toHaveCount(0)
 })
 
 for (const failure of ['constructor', 'timeout']) {

@@ -12,3 +12,4 @@
 - Fixed food markers after branching, made CSV downloads follow the Trends filters, and added hide and restore controls for Food and Births and Deaths.
 - Fixed Trait Space selections after filtering species, rejected invalid day and bin numbers, and let Constant food runs start when old schedule points are out of range.
 - Kept completed days when renaming an active run, opened newborns at a replay point where they are present, and used each replay day's movement and energy rules in creature details.
+- Added a retry when replay reconstruction stops reporting progress. The current view stays available and long replays can keep working while they report progress.

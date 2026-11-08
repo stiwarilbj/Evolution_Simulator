@@ -50,11 +50,24 @@ async function batch(target) {
 
 async function replay(message) {
   const { setup, start, day, records, id } = message
+  let lastProgress = performance.now()
+  function advanceReplay(state, rules, ticks) {
+    const end = Math.min(state.limit, state.tick + ticks)
+    while (state.tick < end) {
+      step(state, rules, Math.min(20, end - state.tick), true)
+      const now = performance.now()
+      if (now - lastProgress >= 1000) {
+        emit('replay-progress', { id })
+        lastProgress = now
+      }
+    }
+  }
   let at = message.checkpoint
   for (let i = start; i < day; i++) {
     const rules = rulesFor(setup, records, i)
     const ctx = dawn(rules, i, at)
-    at = step(ctx, rules, ctx.limit, true).checkpoint
+    advanceReplay(ctx, rules, ctx.limit)
+    at = ctx.settled.checkpoint
     await pause()
   }
   const rules = rulesFor(setup, records, day), state = dawn(rules, day, at)
@@ -78,7 +91,7 @@ async function replay(message) {
   }
   sample()
   while (state.tick < state.limit) {
-    step(state, rules, stride, true)
+    advanceReplay(state, rules, stride)
     sample()
   }
   postMessage({ type: 'track', id, track: { day, duration: state.limit * DT, ticks: state.limit, stride,
