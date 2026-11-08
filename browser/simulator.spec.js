@@ -843,6 +843,40 @@ test('an unresponsive replay times out and can be retried', async ({ page }) => 
   await expect(retry).toHaveCount(0)
 })
 
+test('Compare keeps a cleared run selector empty when the page reloads', async ({ page }) => {
+  await openSimulator(page)
+  for (const name of ['Right archive', 'Left archive']) {
+    await startRun(page, '10', () => page.getByLabel('Run name').fill(name))
+    await quickThrough(page, 1)
+    await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
+    await page.getByRole('button', { name: 'Close', exact: true }).click()
+  }
+
+  await openRunLibrary(page)
+  const archivedRun = page.getByRole('dialog', { name: 'Run Library' }).locator('article').filter({ hasText: 'Right archive' })
+  await archivedRun.getByRole('button', { name: 'Compare', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Day 1 results' })).toBeVisible()
+
+  const left = page.getByRole('combobox', { name: 'Left run', exact: true })
+  const right = page.getByRole('combobox', { name: 'Right run', exact: true })
+  const leftId = await left.inputValue()
+  const rightId = await right.inputValue()
+  const choose = page.getByText('Choose two different saved experiments.')
+  for (const [cleared, kept, clearedId, keptId] of [
+    [right, left, rightId, leftId],
+    [left, right, leftId, rightId],
+  ]) {
+    await cleared.selectOption('')
+    await expect(choose).toBeVisible()
+    await page.reload()
+    await expect(cleared).toHaveValue('')
+    await expect(kept).toHaveValue(keptId)
+    await expect(choose).toBeVisible()
+    await cleared.selectOption(clearedId)
+    await expect(page.getByRole('heading', { name: 'Day 1 results' })).toBeVisible()
+  }
+})
+
 test('Compare can retry a failed replay for the same runs and day', async ({ page }) => {
   await page.addInitScript(() => {
     const NativeWorker = window.Worker

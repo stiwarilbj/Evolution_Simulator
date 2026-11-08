@@ -25,15 +25,15 @@ const scrolls = new Map()
 let navigating = false, routeRequest = 0, retryNavigation, sharedSetupHash
 
 function readComparison(query) {
-  return { left:query.get('left') ?? '', right:query.get('right') ?? '', day:Number(query.get('pairDay')) || null }
+  return { left:query.get('left'), right:query.get('right'), day:Number(query.get('pairDay')) || null }
 }
 function address(view = page.value, day = lab.viewing, settings = lab.settings) {
   if (!lab.run) return '#/'
   const query = new URLSearchParams()
   if (view==='compare') {
     const { left, right, day:pairDay } = comparison.value
-    if (left) query.set('left',left)
-    if (right) query.set('right',right)
+    if (left != null) query.set('left',left)
+    if (right != null) query.set('right',right)
     if (pairDay) query.set('pairDay',pairDay)
   }
   if (settings) query.set('cfg','1')
@@ -161,7 +161,7 @@ function retryReplay() {
   else void lab.retryReplay()
 }
 function compare(id) {
-  openComparison({ left:lab.run.id, right:id ?? '', day:lab.viewing })
+  openComparison({ left:lab.run.id, right:id ?? null, day:lab.viewing })
 }
 function openComparison(pair) {
   comparison.value = pair

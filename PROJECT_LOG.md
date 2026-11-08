@@ -23,3 +23,4 @@
 - Made error messages and Retry simulation available when the World is in full screen.
 - Kept the Mini line chart points centered above their generation tiles in short and split windows.
 - Closed focused Trends charts when leaving Trends so browser Back returns to usable World controls.
+- Kept cleared run choices empty when reloading Compare.
