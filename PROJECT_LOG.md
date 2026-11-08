@@ -10,3 +10,4 @@
 - Checked for pending changes. The working tree was clean, so this update only records the check.
 - Fixed replay navigation, Next Day, and stopped batches. Added recovery for failed simulations and browser checks before and after publishing to GitHub Pages.
 - Fixed food markers after branching, made CSV downloads follow the Trends filters, and added hide and restore controls for Food and Births and Deaths.
+- Fixed Trait Space selections after filtering species, rejected invalid day and bin numbers, and let Constant food runs start when old schedule points are out of range.

@@ -68,7 +68,13 @@ function discard() {
   discarding.value=false
 }
 async function apply() {
-  issue.value=validate(draft)
+  const errors=validate(draft)
+  let setup=draft
+  if(draft.scheduleMode==='constant' && errors.schedule) {
+    setup={ ...draft, schedule:[] }
+    delete errors.schedule
+  }
+  issue.value=errors
   if(fork != null && draft.days<=fork) issue.value.days='The run must continue beyond Day '+fork+'.'
   const first=Object.keys(issue.value)[0]
   if(first) {
@@ -79,7 +85,7 @@ async function apply() {
     return
   }
   applying.value=true
-  try { issue.value=await lab.evolve(draft) }
+  try { issue.value=await lab.evolve(setup) }
   finally { applying.value=false }
 }
 function useProfile(profile) {
@@ -150,10 +156,11 @@ onMounted(()=>dialog.value.showModal())
           </div>
           <div class="daily-card food-card"><h3><Leaf :size="16"/> Food</h3><p>Randomly place this many plants</p>
             <NumberField id="food" v-model="draft.food" label="Food" :min="10" :max="1000" tint="#6C7C3A" compact :error="issue.food"/>
-            <label class="olive-label">Food schedule <select v-model="draft.scheduleMode"><option value="constant">Constant</option><option value="ramp">Ramp</option><option value="step">Step</option></select></label>
+            <label class="olive-label">Food schedule <select v-model="draft.scheduleMode" @change="delete issue.schedule"><option value="constant">Constant</option><option value="ramp">Ramp</option><option value="step">Step</option></select></label>
           </div>
         </div>
         <p class="quiet center">Food and energy reset at dawn.</p>
+        <p v-if="draft.scheduleMode==='constant' && draft.schedule.length" class="quiet center">Constant runs use the daily food count. If the schedule has invalid points, starting the run clears the schedule.</p>
         <div v-if="rewards" class="setting-inset">
           <NumberField id="plantReward" v-model="draft.plantReward" label="Plant reward" :min="0" :max="1000" :pace="100" tint="#6C7C3A" :error="issue.plantReward"/>
           <NumberField id="preyReward" v-model="draft.preyReward" label="Prey reward" :min="0" :max="1000" :pace="100" tint="#8F8048" :error="issue.preyReward"/>
