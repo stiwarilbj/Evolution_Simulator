@@ -164,7 +164,8 @@ function escapeDetail(event) {
     <div v-if="!fold" class="ribbon" @keydown.esc="escapeDetail">
       <div ref="scroll" class="ribbon-scroll" @wheel="wheel" @scroll.passive="anchorDetail">
         <div class="tile-track">
-          <svg v-if="mode==='line'" class="ribbon-line" :viewBox="'0 0 '+tiles.length*100+' 65'" :style="{width:tiles.length*100+'px'}" aria-hidden="true">
+          <svg v-if="mode==='line'" class="ribbon-line" :viewBox="'0 0 '+tiles.length*100+' 65'"
+            :style="{width:tiles.length*100+'px'}" preserveAspectRatio="none" aria-hidden="true">
             <path :d="miniPath" :stroke="miniKey.color" fill="none" stroke-width="2"/>
           </svg>
           <button v-for="tile in tiles" :key="tile.day" type="button" class="day-tile"

@@ -21,3 +21,4 @@
 - Fixed Branch here so it offers earlier completed days while viewing the last day of a run.
 - Fit World, playback, stats, and the timeline inside short and split windows. Kept stats in full screen and moved longer pages into their own scroll area.
 - Made error messages and Retry simulation available when the World is in full screen.
+- Kept the Mini line chart points centered above their generation tiles in short and split windows.

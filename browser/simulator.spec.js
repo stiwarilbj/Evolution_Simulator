@@ -189,6 +189,32 @@ test('World fits split windows and keeps its controls in full screen', async ({ 
   expect(await page.evaluate(() => window.scrollY)).toBe(0)
 })
 
+test('Mini line points stay above their generation tiles when the window shrinks', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page)
+  await quickThrough(page, 3)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('button', { name: 'Generation options' }).click()
+  await page.getByRole('button', { name: 'Mini line', exact: true }).click()
+
+  const line = page.locator('.ribbon-line path')
+  for (const viewport of [
+    { width: 1280, height: 900 },
+    { width: 640, height: 750 },
+    { width: 512, height: 480 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await expect.poll(() => line.evaluate(path => {
+      const screen = path.getScreenCTM()
+      const endpoints = [path.getPointAtLength(0), path.getPointAtLength(path.getTotalLength())]
+      const tiles = [1, 3].map(day => document.querySelector(`.day-tile[data-day="${day}"]`).getBoundingClientRect())
+      return Math.max(...tiles.map(({ left, width }, i) =>
+        Math.abs(endpoints[i].matrixTransform(screen).x - (left + width / 2))))
+    }), { message: `Chart alignment at ${viewport.width} × ${viewport.height}` }).toBeLessThan(1)
+  }
+})
+
 test('Trends marks the food rules used on each completed day of a branch', async ({ page }) => {
   await openSimulator(page)
   await startRun(page, '10', async () => {
