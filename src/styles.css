@@ -365,6 +365,7 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
 .paired-boards{display:grid;grid-template-columns:1fr 1fr;position:relative;border:1px solid var(--line);min-height:clamp(180px,37vw,440px)}
 .paired-boards section{position:relative;min-width:0}
 .paired-boards section+section{border-left:1px solid var(--line)}
+.paired-boards .stage-note button{margin-top:8px}
 .paired-boards h2{position:relative;z-index:1;padding:8px 12px;font-size:16px;color:var(--run-color);pointer-events:none;text-shadow:0 1px 2px #0a0a0a}
 .paired-boards .board{transition:filter .18s}
 .paired-boards .quiet-board .board{filter:brightness(.43)}

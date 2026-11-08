@@ -604,6 +604,51 @@ test('an unresponsive replay times out and can be retried', async ({ page }) => 
   await expect(retry).toHaveCount(0)
 })
 
+test('Compare can retry a failed replay for the same runs and day', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker
+    let failOnce = true
+    window.Worker = class extends NativeWorker {
+      postMessage(data) {
+        if (failOnce && data.type === 'replay' && data.setup.name === 'Right archive' && data.day === 2) {
+          failOnce = false
+          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'error', id: data.id, message: 'Replay unavailable' },
+          })))
+          return
+        }
+        return super.postMessage(data)
+      }
+    }
+  })
+  await openSimulator(page)
+  for (const name of ['Right archive', 'Left archive']) {
+    await startRun(page, '10', () => page.getByLabel('Run name').fill(name))
+    await quickThrough(page, 2)
+    await expect(batchStatus(page, 'Saved through')).toHaveText('Day 2')
+    await page.getByRole('button', { name: 'Close', exact: true }).click()
+  }
+
+  await page.getByRole('button', { name: 'Run options' }).click()
+  await page.getByRole('button', { name: 'Run Library' }).click()
+  const right = page.getByRole('dialog', { name: 'Run Library' }).locator('article').filter({ hasText: 'Right archive' })
+  await right.getByRole('button', { name: 'Compare', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Day 2 results' })).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'Replay unavailable' })).toBeVisible()
+  const play = page.getByRole('button', { name: 'Play comparison' })
+  const progress = page.getByRole('slider', { name: 'Shared day progress' })
+  await expect(play).toBeDisabled()
+  await expect(progress).toBeDisabled()
+
+  await page.getByRole('button', { name: 'Retry replays' }).click()
+  await expect(play).toBeEnabled()
+  await expect(page.getByRole('status').filter({ hasText: 'Replay unavailable' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Day 2 results' })).toBeVisible()
+  await progress.fill('0.5')
+  await expect(page.getByRole('region', { name: 'Left run' }).getByRole('heading')).toHaveText(/Left archive.*5\.0 s/)
+  await expect(page.getByRole('region', { name: 'Right run' }).getByRole('heading')).toHaveText(/Right archive.*5\.0 s/)
+})
+
 for (const failure of ['constructor', 'timeout']) {
   test(`retry recovers after a worker startup ${failure} failure`, async ({ page }) => {
     await page.addInitScript(failure => {

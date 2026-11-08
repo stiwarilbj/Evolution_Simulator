@@ -19,7 +19,7 @@ const horizon=computed(()=>Math.min(left.value?.summaries.length ?? 0,right.valu
 const initialDay = Number.isInteger(props.initial?.day) ? props.initial.day : lab.viewing
 const day=ref(Math.max(1,Math.min(initialDay,horizon.value))), fraction=ref(0), playing=ref(false)
 const replayAvailable=computed(()=>leftId.value!==rightId.value && day.value<=horizon.value)
-const tracks=ref([]), pending=ref(false), error=ref('')
+const tracks=ref([]), pending=ref(false), error=ref(''), replayAttempt=ref(0)
 const cam=ref('board'), scope=ref('all'), layers=ref({sense:false}), focus=ref('')
 const reveal=ref(false), divider=ref(50), emphasis=ref('both')
 const selections=ref([null,null]), boards=[]
@@ -101,7 +101,7 @@ function fit() {
 watch([leftId,rightId],()=>{ scope.value='all' })
 watch(horizon, limit=>{ if (day.value>limit) day.value=Math.max(1,limit) })
 watch([leftId,rightId,day],()=>emit('change',{ left:leftId.value,right:rightId.value,day:day.value }),{immediate:true})
-watch([leftId,rightId,day,replayAvailable],async ()=>{
+watch([leftId,rightId,day,replayAvailable,replayAttempt],async ()=>{
   const token=++job
   stop()
   fraction.value=0
@@ -151,7 +151,10 @@ onBeforeUnmount(()=>{ ++job; stop() })
             :camera="cam" :scope="scope" :dim="scope!=='all'" :selected="selections[index]" :follow="selections[index]!=null" @select="selections[index]=$event"/>
           <h2>{{ run.setup.name }} <small>Seed {{ run.setup.seed }} · {{ format(frames[index]?.time,1) }} s</small></h2>
         </section>
-        <p v-if="pending||error" class="stage-note" role="status">{{ error || 'Building paired replays…' }}</p>
+        <div v-if="pending||error" class="stage-note">
+          <p role="status">{{ error || 'Building paired replays…' }}</p>
+          <button v-if="error" class="secondary" @click="replayAttempt++">Retry replays</button>
+        </div>
       </div>
       <label v-if="reveal" class="compare-reveal">Reveal left and right <input v-model.number="divider" type="range" min="0" max="100"></label>
       <div class="comparison-clock">

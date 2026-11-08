@@ -14,3 +14,4 @@
 - Kept completed days when renaming an active run, opened newborns at a replay point where they are present, and used each replay day's movement and energy rules in creature details.
 - Added a retry when replay reconstruction stops reporting progress. The current view stays available and long replays can keep working while they report progress.
 - Kept copied setup links in the address bar while their settings are open, so refreshing reloads the shared setup.
+- Added a retry for failed comparison replays that keeps the same runs and day selected.
