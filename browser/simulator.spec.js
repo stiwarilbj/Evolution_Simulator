@@ -822,6 +822,39 @@ test('turning off Play Through cancels an automatic replay that is still loading
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled()
 })
 
+test('canceling Quick Sim leaves a finished replay at dusk', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page)
+  await quickThrough(page, 1)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
+  await page.getByRole('button', { name: 'Watch last day' }).click()
+
+  const replayTime = page.getByRole('slider', { name: 'Replay time', includeHidden: true })
+  const speed = page.getByRole('button', { name: 'Viewing speed', exact: true })
+  const quick = page.getByRole('button', { name: 'Quick Sim', exact: true })
+  const dialog = page.getByRole('dialog', { name: 'Quick Sim' })
+  const play = page.getByRole('button', { name: 'Play', exact: true })
+  await speed.click()
+  await page.getByRole('slider', { name: 'Viewing speed multiplier' }).fill('0')
+  await speed.click()
+  await replayTime.fill('9.5')
+  await play.click()
+  await quick.click()
+  await expect(dialog).toBeVisible()
+  await expect(replayTime).toHaveValue('10', { timeout: 10000 })
+
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Replay day', exact: true })).toBeEnabled()
+  await expect(replayTime).toHaveValue('10')
+
+  await page.getByRole('button', { name: 'Next day', exact: true }).click()
+  await play.click()
+  await quick.click()
+  await expect(page.getByRole('button', { name: 'Play', exact: true, includeHidden: true })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeEnabled()
+})
+
 test('stopping early reports the saved boundary and allows another batch', async ({ page }) => {
   await openSimulator(page)
   await startRun(page, '1000')

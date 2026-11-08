@@ -11,7 +11,7 @@ const emit=defineEmits(['compare','watch','world','resume','results'])
 const dialog=ref(), mode=ref('additional'), amount=ref(0), target=ref(1), extension=ref(25), branchFood=ref(lab.run.setup.food)
 const message=ref(''), search=ref(''), file=ref(), removeId=ref(null), renameId=ref(null), newName=ref('')
 const end=ref(lab.completed), start=ref(1), exportScope=ref(lab.scope), exportKind=ref('csv'), branchDay=ref(Math.max(1,Math.min(lab.viewing,lab.latestBranchDay)))
-const startProgress=ref(lab.completed), endProgress=ref(lab.completed), wasPlaying=ref(false)
+const startProgress=ref(lab.completed), endProgress=ref(lab.completed), resumeLive=ref(false)
 const remaining=computed(()=>1000-lab.run.setup.days)
 const base=computed(()=>lab.liveFrame?.time>=lab.liveFrame?.duration ? lab.completed : Math.min(lab.completed+1,lab.run.setup.days))
 const finish=computed(()=>mode.value==='absolute'?target.value:base.value+amount.value)
@@ -33,7 +33,7 @@ const titles={quick:'Quick Sim','quick-progress':'Simulating generations','quick
 watch(()=>lab.modal,key=>{
   message.value=''
   if(key==='quick') {
-    wasPlaying.value=lab.playing
+    resumeLive.value=!lab.replay && lab.playing
     if(!lab.replay) lab.stopPlayback()
     mode.value=lab.targetDay || lab.completed===lab.run.setup.days?'absolute':'additional'
     amount.value=Math.min(25,Math.max(0,lab.run.setup.days-base.value))
@@ -50,7 +50,7 @@ watch(()=>lab.modal,key=>{
   }
 },{immediate:true})
 function close() {
-  if(lab.modal==='quick'&&wasPlaying.value&&!lab.playing) lab.play()
+  if(lab.modal==='quick'&&resumeLive.value&&!lab.replay&&!lab.playing) lab.play()
   lab.modal=null
 }
 function simulate() {
