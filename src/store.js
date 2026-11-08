@@ -57,21 +57,29 @@ export const useLab = defineStore('lab', () => {
   const frame = shallowRef(null), liveFrame = shallowRef(null)
   const viewing = ref(1), replay = ref(false), playing = ref(false)
   const rate = ref(6), through = ref(false), scope = ref('all')
-  const loading = ref(false), batch = shallowRef(null), saved = ref(0), error = ref('')
+  const replayDay = ref(null), replayFailure = shallowRef(null)
+  const loading = computed(() => replayDay.value != null)
+  const batch = shallowRef(null), saved = ref(0), error = ref('')
+  const workerReady = ref(false), connecting = ref(false), workerError = ref('')
   const selected = ref(null), following = ref(false)
   const settings = ref(false), draft = ref(null), modal = ref(null), targetDay = ref(null), branchFrom = ref(null)
   const completed = computed(() => run.value ? last(run.value) : 0)
   const displayDuration = computed(() => frame.value?.duration ?? (run.value?.setup.duration ?? 100) / 10)
   const liveDay = computed(() => liveFrame.value?.day ?? completed.value + 1)
+  const canEnterLive = computed(() => workerReady.value && !batch.value && completed.value < (run.value?.setup.days ?? 0))
+  const canMoveNext = computed(() => viewing.value < completed.value ||
+    (viewing.value === completed.value && canEnterLive.value))
   const status = computed(() => {
     if (loading.value) return 'Building replay'
     if (!replay.value && batch.value) return 'Simulating'
     if (!replay.value && completed.value >= (run.value?.setup.days ?? Infinity)) return 'Finished'
     if (replay.value) return 'Replay'
+    if (workerError.value) return 'Simulation unavailable'
     if (playing.value) return 'Live'
     return frame.value?.time ? 'Paused' : 'Ready'
   })
-  let writer, ticket = 0, cache = new Map(), track, epoch = 0, ready
+  let writer, ticket = 0, cache = new Map(), track, epoch = 0, finishConnection
+  let runRequest = 0, request = 0, batchViewRequest = 0
   let pending = false, requestedDawn = false, autoPrepare = false, restorePlay = false
   let cursor = 0, previous = 0, remainder = 0, renderAt = 0
   let raf, initialised = false, waiting = null
@@ -86,85 +94,133 @@ export const useLab = defineStore('lab', () => {
     }).catch(() => { error.value = 'Local saving is unavailable. You can still export this run.' })
   }
 
-  function reportFailure(message) {
-    error.value = message
-    pending = false
-    batch.value = null
-    playing.value = false
-    loading.value = false
-    ready?.()
-    ready = null
+  function disconnect() {
+    ++epoch
+    writer?.terminate()
+    writer = undefined
+    finishConnection?.(false)
+    workerReady.value = false
   }
 
-  function connect() {
-    writer?.terminate()
-    const token = ++epoch
-    writer = createWorker()
-    writer.onerror = () => reportFailure('The simulation worker stopped. Reopen this run to resume from its saved day.')
-    writer.onmessage = ({ data }) => {
-      if (token !== epoch) return
-      if (data.type === 'error') return reportFailure(data.message)
-      if (data.type === 'ready') {
-        ready?.()
-        ready = null
+  function reportFailure(message) {
+    const unfinished = batch.value || (liveFrame.value?.day > completed.value && liveFrame.value?.time > 0)
+    const recovery = !unfinished ? '' : run.value.partial
+      ? ' Retry to resume the unfinished day from its last checkpoint.'
+      : ' The unfinished day will restart when you retry.'
+    workerError.value = message + recovery
+    disconnect()
+    pending = false
+    requestedDawn = false
+    autoPrepare = false
+    waiting = null
+    batch.value = null
+    playing.value = false
+    if (modal.value === 'quick-progress') modal.value = null
+  }
+
+  function connect(value) {
+    disconnect()
+    const token = epoch
+    connecting.value = true
+    return new Promise(resolve => {
+      const timeout = setTimeout(() => fail('The simulation took too long to start.'), 10000)
+      finishConnection = success => {
+        clearTimeout(timeout)
+        finishConnection = null
+        connecting.value = false
+        resolve(success)
       }
-      if (data.type === 'advanced') pending = false
-      if (data.type === 'frame') {
-        liveFrame.value = data.frame
-        if (!replay.value && !batch.value) {
-          frame.value = data.frame
-          viewing.value = data.frame.day
-        }
+      function fail(message) {
+        if (token === epoch) reportFailure(message)
       }
-      if (data.type === 'partial') {
-        run.value = { ...run.value, partial: data.partial }
-        persist()
+      function workerFailed() {
+        fail(workerReady.value ? 'The simulation stopped unexpectedly.' : 'The simulation could not start.')
       }
-      if (data.type === 'commit') {
-        const { day, final } = data
-        run.value = recordDay(run.value, data)
-        persist()
-        if (final) {
-          liveFrame.value = final
-          if (!replay.value) {
-            frame.value = final
-            if (playing.value && through.value && day < run.value.setup.days) {
-              requestedDawn = true
-              writer.postMessage({ type: 'dawn' })
-            } else playing.value = false
+      try {
+        writer = createWorker()
+        writer.onerror = writer.onmessageerror = workerFailed
+        writer.onmessage = ({ data }) => {
+          if (token !== epoch) return
+          if (data.type === 'error') return workerFailed()
+          if (data.type === 'ready') {
+            workerReady.value = true
+            workerError.value = ''
+            finishConnection?.(true)
+          } else {
+            receive(data)
           }
         }
-        if (waiting?.day === day) {
-          const { resume } = waiting
-          waiting = null
-          void openDay(day, 0, resume)
+        writer.postMessage({ type: 'init', config: value.setup, checkpoint: value.latest,
+          committed: last(value), partial: value.partial, records: value.revisions })
+      } catch {
+        fail('The simulation could not start.')
+      }
+    })
+  }
+
+  function receive(data) {
+    if (data.type === 'advanced') pending = false
+    if (data.type === 'frame') {
+      liveFrame.value = data.frame
+      if (!replay.value && !batch.value && !loading.value) {
+        frame.value = data.frame
+        viewing.value = data.frame.day
+      }
+    }
+    if (data.type === 'partial') {
+      run.value = { ...run.value, partial: data.partial }
+      persist()
+    }
+    if (data.type === 'commit') {
+      const { day, final } = data
+      run.value = recordDay(run.value, data)
+      persist()
+      if (final) {
+        liveFrame.value = final
+        if (!replay.value && !loading.value) {
+          frame.value = final
+          if (playing.value && through.value && day < run.value.setup.days) {
+            requestedDawn = true
+            writer.postMessage({ type: 'dawn' })
+          } else playing.value = false
         }
       }
-      if (data.type === 'done') {
-        const finished = batch.value
-        batch.value = null
-        if (autoPrepare && data.day === 1) {
-          autoPrepare = false
-          void openDay(1)
-          if (run.value.setup.days > 1) simulate(run.value.setup.days, 'Preparing')
-        } else {
-          if (!replay.value && (finished?.label === 'Finish Day' || data.day >= run.value.setup.days)) {
-            void openDay(data.day, Infinity)
-          } else if (!replay.value && liveFrame.value) {
-            frame.value = liveFrame.value
-            viewing.value = liveFrame.value.day
-          }
-          if (modal.value === 'quick-progress' && finished) modal.value = 'quick-done'
+      if (waiting?.day === day) {
+        const { resume } = waiting
+        waiting = null
+        void openDay(day, 0, resume)
+      }
+    }
+    if (data.type === 'done') {
+      const finished = batch.value
+      const stopped = data.stopped && data.day < finished?.target
+      const prepare = autoPrepare && data.day === 1 && !data.stopped
+      const mayShowReplay = batchViewRequest === request && !loading.value && !replay.value
+      batch.value = null
+      autoPrepare = false
+      if (prepare) {
+        if (mayShowReplay) void openDay(1)
+        if (run.value.setup.days > 1) simulate(run.value.setup.days, 'Preparing')
+      } else if (!replay.value && !loading.value) {
+        if (mayShowReplay && (finished?.label === 'Finish Day' || data.day >= run.value.setup.days)) {
+          void openDay(data.day, Infinity)
+        } else if (liveFrame.value) {
+          frame.value = liveFrame.value
+          viewing.value = liveFrame.value.day
         }
+      }
+      if (modal.value === 'quick-progress' && finished) {
+        modal.value = stopped ? 'quick-stopped' : 'quick-done'
       }
     }
   }
 
-  async function useRun(value, newRun = false, restoreDay = null) {
-    ++request
+  async function useRun(value, newRun = false, restoreDay = null, isCurrent = () => true) {
+    const switchId = ++runRequest
+    cancelReplay()
+    const viewRequest = request
     stopPlayback()
-    if (run.value && !batch.value) {
-      const previousRun = run.value
+    if (run.value && writer && !batch.value) {
       const oldWriter = writer
       if (!replay.value && liveFrame.value?.time > 0 && liveFrame.value.time < liveFrame.value.duration) {
         await new Promise(resolve => {
@@ -175,7 +231,23 @@ export const useLab = defineStore('lab', () => {
           oldWriter.postMessage({ type: 'checkpoint' })
         })
       }
-      if (run.value?.id !== previousRun.id) return
+    }
+    const canSwitch = () => switchId === runRequest && viewRequest === request && isCurrent()
+    if (!canSwitch()) return false
+    const sameRun = run.value?.id === value.id
+    if (sameRun) value = run.value
+    let restoredTrack
+    if (run.value && !sameRun && restoreDay >= 1 && restoreDay <= last(value)) {
+      replayDay.value = restoreDay
+      try {
+        restoredTrack = await getTrack(value, restoreDay)
+      } catch {
+        if (canSwitch()) replayFailure.value = { day: restoreDay, time: 0, resume: false }
+        return false
+      } finally {
+        if (canSwitch()) replayDay.value = null
+      }
+      if (!canSwitch()) return false
     }
     cache = new Map()
     track = null
@@ -184,33 +256,50 @@ export const useLab = defineStore('lab', () => {
     requestedDawn = false
     waiting = null
     batch.value = null
-    saved.value = last(value)
-    loading.value = false
+    autoPrepare = false
+    if (!sameRun) saved.value = last(value)
     selected.value = null
     following.value = false
     scope.value = 'all'
     through.value = value.setup.mode === 'live'
     run.value = value
     error.value = ''
+    workerError.value = ''
     try { localStorage.setItem('evolution.active', value.id) } catch {}
-    connect()
     const day = Math.min(last(value) + 1, value.setup.days)
     viewing.value = day
     frame.value = value.partial ? snapshot(value.partial) :
       day > last(value) ? snapshot(dawn(rulesFor(value.setup,value.revisions,day), day, value.latest)) : null
     liveFrame.value = frame.value
+    if (restoredTrack) {
+      cache.set(value.id + ':' + restoreDay, restoredTrack)
+      showReplay(restoredTrack, 0, false)
+    }
     if (newRun) persist()
-    const connected = new Promise(resolve => { ready = resolve })
-    writer.postMessage({ type: 'init', config: value.setup, checkpoint: value.latest,
-      committed: last(value), partial: value.partial, records:value.revisions })
-    await connected
+    const connected = await connect(value)
+    if (switchId !== runRequest || !isCurrent()) return false
+    if (connected && value.setup.mode === 'prepare' && !last(value)) {
+      autoPrepare = true
+      simulate(1, 'Preparing')
+    } else if (viewRequest === request && !restoredTrack) {
+      if (restoreDay >= 1 && restoreDay <= last(value)) await openDay(restoreDay)
+      else if (restoreDay == null && (value.setup.mode === 'prepare' || last(value) >= value.setup.days)) {
+        await openDay(last(value))
+      }
+    }
+    return switchId === runRequest && isCurrent()
+  }
+
+  async function retrySimulation() {
+    if (!run.value || !workerError.value || connecting.value) return
+    const value = run.value
+    const viewRequest = request
+    if (!await connect(value) || run.value?.id !== value.id) return
     if (value.setup.mode === 'prepare' && !last(value)) {
       autoPrepare = true
       simulate(1, 'Preparing')
-    } else {
-      autoPrepare = false
-      if (restoreDay && restoreDay<=last(value)) await openDay(restoreDay)
-      else if (value.setup.mode === 'prepare' || last(value) >= value.setup.days) await openDay(last(value))
+    } else if (viewRequest === request && !frame.value && completed.value) {
+      await openDay(replayFailure.value?.day ?? completed.value)
     }
   }
 
@@ -228,7 +317,7 @@ export const useLab = defineStore('lab', () => {
       if (document.hidden) stopPlayback()
     })
     setInterval(() => {
-      if (playing.value && !replay.value && !batch.value) writer.postMessage({ type: 'checkpoint' })
+      if (playing.value && !replay.value && !batch.value) writer?.postMessage({ type: 'checkpoint' })
     }, 5000)
   }
 
@@ -255,53 +344,78 @@ export const useLab = defineStore('lab', () => {
       cache.set(key, result)
       return Promise.resolve(result)
     }
+    const runCache = cache
     return new Promise((resolve, reject) => {
+      const start = [...value.checkpoints].reverse().find(c => c.day < day)
+      if (!start) throw new Error('This day has no opening checkpoint.')
       const job = createWorker()
       const id = ++ticket
-      const start = [...value.checkpoints].reverse().find(c => c.day < day)
-      if (!start) {
+      function fail() {
         job.terminate()
-        reject(new Error('This day has no opening checkpoint.'))
-        return
+        reject(new Error('Replay reconstruction stopped.'))
       }
-      job.onerror = () => { job.terminate(); reject(new Error('Replay reconstruction stopped.')) }
+      job.onerror = job.onmessageerror = fail
       job.onmessage = ({ data }) => {
         if (data.id !== id) return
         job.terminate()
         if (data.type === 'error') { reject(new Error(data.message)); return }
-        const result = prepareTrack(data.track)
-        cache.set(key, result)
-        while (cache.size > 3) cache.delete(cache.keys().next().value)
-        resolve(result)
+        try {
+          const result = prepareTrack(data.track)
+          runCache.set(key, result)
+          while (runCache.size > 3) runCache.delete(runCache.keys().next().value)
+          resolve(result)
+        } catch (error) { reject(error) }
       }
-      job.postMessage({ type: 'replay', id, setup: value.setup, records: value.revisions,
-        start: start.day + 1, checkpoint: start, day })
+      try {
+        job.postMessage({ type: 'replay', id, setup: value.setup, records: value.revisions,
+          start: start.day + 1, checkpoint: start, day })
+      } catch { fail() }
     })
   }
 
-  let request = 0
+  function cancelReplay() {
+    ++request
+    waiting = null
+    replayDay.value = null
+    replayFailure.value = null
+  }
+
+  function showReplay(result, time, resume) {
+    const nextCursor = clamp(time, 0, result.duration)
+    const nextFrame = trackFrame(result, nextCursor)
+    if (!replay.value) through.value = false
+    track = result
+    cursor = nextCursor
+    replay.value = true
+    viewing.value = result.day
+    frame.value = nextFrame
+    if (following.value && !nextFrame.blobs.some(b => b.alive && b.id === selected.value)) following.value = false
+    playing.value = resume
+  }
+
   async function openDay(day, time = 0, resume = false) {
-    if (!run.value || !Number.isInteger(day) || day < 1 || day > completed.value) return
+    if (!run.value || !Number.isInteger(day) || day < 1 || day > completed.value) return false
     const value = run.value
     const token = ++request
     stopPlayback()
-    if (!replay.value) through.value = false
-    replay.value = true
-    viewing.value = day
-    loading.value = true
+    replayFailure.value = null
+    replayDay.value = day
     try {
       const result = await getTrack(value, day)
-      if (run.value?.id !== value.id || token !== request) return
-      track = result
-      cursor = clamp(time, 0, track.duration)
-      frame.value = trackFrame(track, cursor)
-      if (following.value && !frame.value.blobs.some(b => b.alive && b.id === selected.value)) following.value = false
-      playing.value = resume
-    } catch (e) {
-      if (token === request) error.value = e.message
+      if (run.value?.id !== value.id || token !== request) return false
+      showReplay(result, time, resume)
+      return true
+    } catch {
+      if (token === request) replayFailure.value = { day, time, resume }
+      return false
     } finally {
-      if (token === request) loading.value = false
+      if (token === request) replayDay.value = null
     }
+  }
+
+  function retryReplay() {
+    const failure = replayFailure.value
+    if (failure) return openDay(failure.day, failure.time, failure.resume)
   }
 
   function stopPlayback() {
@@ -311,23 +425,32 @@ export const useLab = defineStore('lab', () => {
     remainder = 0
   }
 
-  function goLive() {
-    if (!run.value || batch.value || completed.value >= run.value.setup.days) return
-    ++request
+  function goLive(restart = false) {
+    if (!canEnterLive.value) return
+    cancelReplay()
     stopPlayback()
-    loading.value = false
     replay.value = false
     through.value = true
-    writer.postMessage({ type: 'dawn' })
+    if (restart && liveFrame.value?.day > completed.value && liveFrame.value.time > 0) {
+      const day = completed.value + 1
+      const { setup, revisions, latest } = run.value
+      liveFrame.value = snapshot(dawn(rulesFor(setup, revisions, day), day, latest))
+    }
+    if (liveFrame.value?.day > completed.value) {
+      frame.value = liveFrame.value
+      viewing.value = liveFrame.value.day
+    }
+    writer.postMessage({ type: 'dawn', restart })
   }
 
   function prepareOrLive() {
     if (batch.value?.label === 'Preparing') {
       const activeWriter = writer
+      const viewRequest = request
       const stopThenGo = ({data}) => {
         if (data.type !== 'done') return
         activeWriter.removeEventListener('message', stopThenGo)
-        goLive()
+        if (writer === activeWriter && viewRequest === request) goLive()
       }
       writer.addEventListener('message', stopThenGo)
       stopBatch()
@@ -342,7 +465,7 @@ export const useLab = defineStore('lab', () => {
 
   function play() {
     if (playing.value || waiting) { stopPlayback(); return }
-    if (loading.value || !frame.value || (!replay.value && batch.value)) return
+    if (loading.value || !frame.value || (!replay.value && (!workerReady.value || batch.value))) return
     if (replay.value && cursor >= displayDuration.value) seek(0)
     else if (!replay.value && frame.value.time >= frame.value.duration) {
       if (completed.value >= run.value.setup.days) { void openDay(completed.value, 0, true); return }
@@ -355,7 +478,7 @@ export const useLab = defineStore('lab', () => {
   function stepOnce() {
     stopPlayback()
     if (replay.value) seek(cursor + DT)
-    else if (!pending && !batch.value && frame.value?.time < displayDuration.value) {
+    else if (workerReady.value && !loading.value && !pending && !batch.value && frame.value?.time < displayDuration.value) {
       pending = true
       writer.postMessage({ type: 'advance', ticks: 1 })
     }
@@ -364,7 +487,7 @@ export const useLab = defineStore('lab', () => {
   function moveDay(delta) {
     const day = viewing.value + delta
     if (day >= 1 && day <= completed.value) void openDay(day)
-    else if (delta === 1 && !batch.value && day <= run.value.setup.days && viewing.value === completed.value) goLive()
+    else if (delta === 1 && viewing.value === completed.value) goLive(true)
   }
 
   function animate(now) {
@@ -398,8 +521,9 @@ export const useLab = defineStore('lab', () => {
   }
 
   function simulate(target, label = 'Quick Sim') {
-    if (!run.value || batch.value || target <= completed.value || target > run.value.setup.days) return false
+    if (!canEnterLive.value || !Number.isInteger(target) || target <= completed.value || target > run.value.setup.days) return false
     if (!replay.value) stopPlayback()
+    batchViewRequest = request
     batch.value = { target, start: completed.value, label, stopping: false }
     writer.postMessage({ type: 'batch', target })
     return true
@@ -417,7 +541,7 @@ export const useLab = defineStore('lab', () => {
   }
 
   function extend(days) {
-    if (!run.value || batch.value || days <= run.value.setup.days || days > 1000) return
+    if (!workerReady.value || batch.value || days <= run.value.setup.days || days > 1000) return
     run.value = { ...run.value, setup: { ...run.value.setup, days } }
     writer.postMessage({ type: 'extend', days })
     persist()
@@ -457,10 +581,10 @@ export const useLab = defineStore('lab', () => {
     return {}
   }
 
-  async function switchRun(value) {
+  async function switchRun(value, isCurrent, restoreDay) {
     modal.value = null
     draft.value = null
-    await useRun(value)
+    return useRun(value, false, restoreDay, isCurrent)
   }
 
   async function importBranch(setup,revisions) {
@@ -506,7 +630,8 @@ export const useLab = defineStore('lab', () => {
   }
 
   return { run, library, frame, viewing, liveFrame, liveDay, replay, playing, rate, through, scope, loading, batch, saved,
-    error, selected, following, settings, draft, modal, completed, displayDuration, status, init, openDay, goLive, seek, play,
+    error, workerReady, connecting, workerError, retrySimulation, replayDay, replayFailure, cancelReplay, retryReplay,
+    canEnterLive, canMoveNext, selected, following, settings, draft, modal, completed, displayDuration, status, init, openDay, goLive, seek, play,
     stopPlayback, stepOnce, moveDay, simulate, stopBatch, extend, openSettings, closeSettings, evolve, switchRun, rename,
     remove, getTrack, branch, prepareOrLive, targetDay, quickForDay, branchFrom, importBranch, preparePair }
 })

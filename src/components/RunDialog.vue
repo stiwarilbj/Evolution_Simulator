@@ -7,7 +7,7 @@ import { starter, randomSeed, validate } from '../engine/config.js'
 import { csv, download, setupLink } from '../export.js'
 
 const lab=useLab()
-const emit=defineEmits(['compare','watch','world','results'])
+const emit=defineEmits(['compare','watch','world','resume','results'])
 const dialog=ref(), mode=ref('additional'), amount=ref(0), target=ref(1), extension=ref(25), branchFood=ref(lab.run.setup.food)
 const message=ref(''), search=ref(''), file=ref(), removeId=ref(null), renameId=ref(null), newName=ref('')
 const end=ref(lab.completed), start=ref(1), exportScope=ref(lab.scope), exportKind=ref('csv'), branchDay=ref(Math.max(1,Math.min(lab.viewing,lab.completed)))
@@ -20,7 +20,8 @@ const rows=computed(()=>lab.run.summaries.map(s=>s.rows[lab.scope]).filter(Boole
 const matches=computed(()=>[...lab.library].sort((a,b)=>b.created-a.created).filter(r=>r.setup.name.toLowerCase().includes(search.value.toLowerCase())))
 const canSim=computed(()=>Number.isInteger(finish.value)&&finish.value>=1&&finish.value<=lab.run.setup.days&&
   (mode.value==='absolute'||Number.isInteger(amount.value)&&amount.value>=0))
-const titles={quick:'Quick Sim','quick-progress':'Simulating generations','quick-done':'Simulation complete',extend:'More Generations',
+const titles={quick:'Quick Sim','quick-progress':'Simulating generations','quick-done':'Simulation complete',
+  'quick-stopped':'Simulation stopped',extend:'More Generations',
   library:'Run Library',download:'Download',table:'Generation statistics',branch:'Branch here'}
 watch(()=>lab.modal,key=>{
   message.value=''
@@ -104,23 +105,28 @@ onMounted(()=>dialog.value.showModal())
       <p v-else-if="canSim" class="destination">{{ finish<=lab.completed?'Day '+finish+' is ready to watch.':finish===base?'Finish Day '+finish:'Finish Day '+base+', then complete Days '+(base+1)+'–'+finish }}</p>
       <footer><button class="secondary" @click="close">Cancel</button>
         <button v-if="finish>lab.run.setup.days" class="primary" @click="lab.modal='extend'">More Generations</button>
-        <button v-else class="primary" :disabled="!canSim" @click="simulate"><FastForward v-if="finish>lab.completed" :size="16"/>{{ finish<=lab.completed?'Watch Day '+finish:'Simulate' }}</button>
+        <button v-else class="primary" :disabled="!canSim || finish>lab.completed && !lab.workerReady" @click="simulate"><FastForward v-if="finish>lab.completed" :size="16"/>{{ finish<=lab.completed?'Watch Day '+finish:'Simulate' }}</button>
       </footer>
     </template>
-    <template v-else-if="lab.modal==='quick-progress' || lab.modal==='quick-done'">
+    <template v-else-if="['quick-progress','quick-done','quick-stopped'].includes(lab.modal)">
       <progress :value="Math.max(0,lab.completed-startProgress)" :max="Math.max(1,endProgress-startProgress)" aria-label="Batch progress"></progress>
-      <dl class="pair-readout"><dt>Completed</dt><dd>{{ Math.max(0,lab.completed-startProgress) }} of {{ Math.max(0,endProgress-startProgress) }}</dd>
-        <dt>{{ lab.batch?'Computing':'Reached' }}</dt><dd>Day {{ lab.batch?lab.completed+1:lab.completed }}</dd><dt>Saved through</dt><dd>Day {{ lab.saved }}</dd></dl>
+      <dl class="pair-readout"><dt>Completed in this batch</dt><dd>{{ Math.max(0,lab.completed-startProgress) }} of {{ Math.max(0,endProgress-startProgress) }}</dd>
+        <dt v-if="lab.batch">Computing</dt><dd v-if="lab.batch">Day {{ lab.completed+1 }}</dd>
+        <dt>Completed through</dt><dd>Day {{ lab.completed }}</dd><dt>Saved through</dt><dd>Day {{ lab.saved }}</dd></dl>
       <p v-if="lab.batch?.stopping" class="quiet">Stopping at the next day boundary.</p>
       <footer><button class="secondary" @click="close">{{ lab.batch?'Hide progress':'Close' }}</button>
         <button v-if="lab.batch" class="primary" :disabled="lab.batch.stopping" @click="lab.stopBatch">Stop after this day</button>
-        <button v-else-if="lab.completed" class="primary" @click="lab.modal=null;emit('watch',lab.completed)">Watch last day</button></footer>
+        <template v-else>
+          <button v-if="lab.canEnterLive" class="secondary" @click="lab.modal='quick'">New Quick Sim</button>
+          <button v-if="lab.completed" class="primary" @click="emit('watch',lab.completed)">Watch last day</button>
+        </template>
+      </footer>
     </template>
     <template v-else-if="lab.modal==='extend'">
       <p>Add days to the existing run.</p><dl class="pair-readout"><dt>Current limit</dt><dd>Day {{ lab.run.setup.days }}</dd><dt>New limit</dt><dd>Day {{ lab.run.setup.days+(Number(extension)||0) }}</dd></dl>
       <label class="dialog-field">Additional days <input v-model.number="extension" type="number" min="1" :max="remaining"></label>
       <p class="quiet">{{ remaining }} days available before Day 1,000.<template v-if="lab.batch"> Stop or finish the current job before extending.</template></p>
-      <footer><button class="secondary" @click="close">Cancel</button><button class="primary" :disabled="!!lab.batch||!Number.isInteger(extension)||extension<1||extension>remaining" @click="lab.extend(lab.run.setup.days+extension)">Extend</button></footer>
+      <footer><button class="secondary" @click="close">Cancel</button><button class="primary" :disabled="!lab.workerReady||!!lab.batch||!Number.isInteger(extension)||extension<1||extension>remaining" @click="lab.extend(lab.run.setup.days+extension)">Extend</button></footer>
     </template>
     <template v-else-if="lab.modal==='download'">
       <div class="split-options"><button class="secondary" :aria-pressed="exportKind==='csv'" @click="exportKind='csv'">CSV results</button>
@@ -154,7 +160,7 @@ onMounted(()=>dialog.value.showModal())
         <article v-for="run in matches" :key="run.id">
           <div><strong>{{ run.setup.name }}</strong> <span v-if="run.id===lab.run.id" class="teal">● Active</span>
             <small>Seed {{ run.setup.seed }} · Saved through Day {{ run.summaries.at(-1)?.day ?? 0 }}</small></div>
-          <button class="secondary" @click="lab.switchRun(run);emit('world')">Resume</button>
+          <button class="secondary" @click="emit('resume',run)">Resume</button>
           <button v-if="run.id!==lab.run.id" class="secondary" @click="emit('compare',run.id)">Compare</button>
           <details><summary>Actions</summary><div class="library-menu">
             <button @click="emit('results',run)">View results</button>

@@ -107,7 +107,15 @@ self.onmessage = async ({ data }) => {
         emit('advanced')
         break
       }
-      case 'dawn': if (!busy) show(); break
+      case 'dawn':
+        if (!busy) {
+          if (data.restart && partial?.tick > 0) {
+            partial = null
+            emit('partial', { partial })
+          }
+          show()
+        }
+        break
       case 'batch': if (!busy) await batch(data.target); break
       case 'stop': stopped = true; break
       case 'extend': config.days = data.days; break

@@ -157,7 +157,7 @@ defineExpose({ overhead:()=>{ lab.following=false; camera.value='overhead'; laye
         <div v-if="speedRange.min === speedRange.max">All {{ format(speedRange.min) }}</div>
         <div v-else><span>{{ format(speedRange.min) }}</span><span>{{ format(speedRange.max) }}</span></div>
       </div>
-      <div v-if="lab.loading" class="stage-note" role="status">Building replay for Day {{ lab.viewing }}…</div>
+      <div v-if="lab.loading" class="stage-note" role="status">Building replay for Day {{ lab.replayDay }}…</div>
       <div v-else-if="lab.frame && !living.length" class="stage-note"><strong>Extinction</strong><span>Day {{ lab.viewing }} · No living creatures</span></div>
       <span v-if="fallback" class="render-note" title="Canvas rendering is active">Canvas view</span>
       <div class="player">
@@ -165,12 +165,12 @@ defineExpose({ overhead:()=>{ lab.following=false; camera.value='overhead'; laye
         <div class="transport" role="group" aria-label="Day playback">
           <button class="icon" title="Previous day" aria-label="Previous day" :disabled="lab.viewing<=1 || lab.loading" @click="lab.moveDay(-1)"><ChevronLeft :size="27"/></button>
           <button class="icon play" :title="transportLabel" :aria-label="transportLabel"
-            :disabled="!lab.frame || lab.loading || !!lab.batch && !lab.replay" @click="lab.play">
+            :disabled="!lab.frame || lab.loading || !lab.replay && (!lab.workerReady || !!lab.batch)" @click="lab.play">
             <Pause v-if="lab.playing" :size="24" fill="currentColor"/>
             <RotateCcw v-else-if="transportLabel==='Replay day'" :size="23"/>
             <Play v-else :size="24" fill="currentColor"/>
           </button>
-          <button class="icon" title="Next day" aria-label="Next day" :disabled="lab.viewing>=lab.completed || lab.loading" @click="lab.moveDay(1)"><ChevronRight :size="27"/></button>
+          <button class="icon" title="Next day" aria-label="Next day" :disabled="!lab.canMoveNext || lab.loading" @click="lab.moveDay(1)"><ChevronRight :size="27"/></button>
         </div>
       </div>
       <div class="player-actions">
@@ -188,10 +188,10 @@ defineExpose({ overhead:()=>{ lab.following=false; camera.value='overhead'; laye
         <button class="icon compact" aria-label="Close speed controls" @click="tool=null"><ChevronDown :size="16"/></button>
       </div>
       <div v-if="tool==='player'" class="pop player-menu">
-        <button :disabled="!!lab.batch" @click="endDay">{{ lab.replay ? 'Go to end' : 'Finish Day' }}</button>
-        <button :disabled="!!lab.batch && !lab.replay" @click="lab.stepOnce(); tool=null">Step one tick</button>
+        <button :disabled="lab.loading || !lab.replay && (!lab.workerReady || !!lab.batch)" @click="endDay">{{ lab.replay ? 'Go to end' : 'Finish Day' }}</button>
+        <button :disabled="lab.loading || !lab.replay && (!lab.workerReady || !!lab.batch)" @click="lab.stepOnce(); tool=null">Step one tick</button>
         <button v-if="lab.completed" @click="lab.openDay(lab.completed); tool=null">Go to frontier</button>
-        <button v-if="lab.replay && lab.completed<lab.run.setup.days && !lab.batch" @click="lab.goLive(); tool=null">Back to Live</button>
+        <button v-if="lab.replay && lab.canEnterLive" @click="lab.goLive(); tool=null">Back to Live</button>
       </div>
       <aside v-if="details" class="details" aria-label="Creature details">
         <header><strong>{{ visible ? (species?.name+' · #'+visible.id) : 'Creatures' }}</strong><button class="icon" aria-label="Close creature details" @click="details=false"><X :size="19"/></button></header>
