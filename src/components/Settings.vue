@@ -12,6 +12,19 @@ const fork = lab.branchFrom
 const dialog = ref(), tab = ref(draft.species[0].id), issue = ref({}), savedSpecies = ref(null)
 const copied = ref(false), advanced = ref(false), rewards = ref(false), discarding = ref(false), applying = ref(false)
 const selected = computed(() => draft.species.find(s => s.id===tab.value) ?? draft.species[0])
+const mutationProfile = computed({
+  get() {
+    const { speed, size, sense } = selected.value.mutation
+    if (speed && size && sense) return 'all'
+    if (!size && !sense) return speed ? 'speed' : 'locked'
+    return ''
+  },
+  set(profile) {
+    for (const trait of TRAITS) {
+      selected.value.mutation[trait] = profile === 'all' || (profile === 'speed' && trait === 'speed')
+    }
+  },
+})
 const seconds = computed({ get:()=>draft.duration==='' ? '' : draft.duration/10,
   set:value=>{ draft.duration=value==='' ? '' : Math.round(value*10) } })
 const total = computed(() => draft.species.filter(s=>s.enabled).reduce((sum,s)=>sum+(Number(s.count)||0),0))
@@ -87,9 +100,6 @@ async function apply() {
   applying.value=true
   try { issue.value=await lab.evolve(setup) }
   finally { applying.value=false }
-}
-function useProfile(profile) {
-  for(const trait of TRAITS) selected.value.mutation[trait]=profile==='all' || profile==='speed' && trait==='speed'
 }
 onMounted(()=>dialog.value.showModal())
 </script>
@@ -204,7 +214,7 @@ onMounted(()=>dialog.value.showModal())
             <label><input v-model="draft.sameSpecies" type="checkbox" :disabled="!draft.predation"> Same-species hunting</label>
             <label>Stride <select v-model="draft.stride"><option value="linked">Size-linked</option><option value="speed">Speed only</option></select></label>
             <label>Energy model <select v-model="draft.metabolism"><option value="product">Product</option><option value="additive">Walkthrough additive</option></select></label>
-            <label>Mutation profile <select @change="useProfile($event.target.value)"><option value="">Choose a profile</option><option value="all">All unlocked</option><option value="speed">Speed only</option><option value="locked">All locked</option></select></label>
+            <label>Mutation profile <select v-model="mutationProfile"><option value="" disabled>Custom</option><option value="all">All unlocked</option><option value="speed">Speed only</option><option value="locked">All locked</option></select></label>
             <output>{{ draft.metabolism==='product' ? 'size³ × speed² × sense ÷ 20,000' : '0.001 × (size³ × effective speed² + sense)' }}<small>{{ cost(selected,draft).toFixed(1) }} energy/s for {{ selected.name }}</small></output>
           </div>
         </div>

@@ -257,6 +257,36 @@ test('Constant food settings can start after shortening a scheduled run', async 
   await expect(page.getByRole('button', { name: 'Run options' })).toHaveText('Day 1 / 10 · Ready')
 })
 
+test('mutation profiles follow the selected species and its trait switches', async ({ page }) => {
+  await openSimulator(page)
+  await page.getByRole('button', { name: 'Simulation Settings' }).click()
+  await page.getByRole('button', { name: /^Advanced Rules/ }).click()
+  const profile = page.getByLabel('Mutation profile')
+  const size = page.getByRole('checkbox', { name: 'Allow size mutation' })
+  const sense = page.getByRole('checkbox', { name: 'Allow sense mutation' })
+
+  await profile.selectOption('speed')
+  await expect(size).not.toBeChecked()
+  await expect(sense).not.toBeChecked()
+
+  await page.getByRole('button', { name: /^Orange/ }).click()
+  await expect(size).toBeChecked()
+  await expect(profile).toHaveValue('all')
+  await profile.selectOption('locked')
+  await expect(page.getByRole('checkbox', { name: 'Allow speed mutation' })).not.toBeChecked()
+  await expect(size).not.toBeChecked()
+  await expect(sense).not.toBeChecked()
+
+  await page.getByRole('button', { name: 'Blue', exact: true }).click()
+  await expect(profile).toHaveValue('speed')
+  await size.check()
+  await expect(profile).toHaveValue('')
+  await sense.check()
+  await expect(profile).toHaveValue('all')
+  await page.getByRole('button', { name: /^Orange/ }).click()
+  await expect(profile).toHaveValue('locked')
+})
+
 test('Trait Space keeps selections within the species filter and only loads whole days', async ({ page }) => {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
