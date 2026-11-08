@@ -10,7 +10,7 @@ const lab=useLab()
 const emit=defineEmits(['compare','watch','world','resume','results'])
 const dialog=ref(), mode=ref('additional'), amount=ref(0), target=ref(1), extension=ref(25), branchFood=ref(lab.run.setup.food)
 const message=ref(''), search=ref(''), file=ref(), removeId=ref(null), renameId=ref(null), newName=ref('')
-const end=ref(lab.completed), start=ref(1), exportScope=ref(lab.scope), exportKind=ref('csv'), branchDay=ref(Math.max(1,Math.min(lab.viewing,lab.completed)))
+const end=ref(lab.completed), start=ref(1), exportScope=ref(lab.scope), exportKind=ref('csv'), branchDay=ref(Math.max(1,Math.min(lab.viewing,lab.latestBranchDay)))
 const startProgress=ref(lab.completed), endProgress=ref(lab.completed), wasPlaying=ref(false)
 const remaining=computed(()=>1000-lab.run.setup.days)
 const base=computed(()=>lab.liveFrame?.time>=lab.liveFrame?.duration ? lab.completed : Math.min(lab.completed+1,lab.run.setup.days))
@@ -90,8 +90,8 @@ async function importSetup(event) {
 }
 async function createBranch(edit=false) {
   const setup=JSON.parse(JSON.stringify(lab.run.setup))
-  if(!Number.isInteger(branchDay.value)||branchDay.value<1||branchDay.value>=setup.days||
-     branchDay.value>lab.completed||!Number.isInteger(branchFood.value)||branchFood.value<10||branchFood.value>1000){
+  if(!Number.isInteger(branchDay.value)||branchDay.value<1||branchDay.value>lab.latestBranchDay||
+     !Number.isInteger(branchFood.value)||branchFood.value<10||branchFood.value>1000){
     message.value='Choose a completed day before the run limit and a food count from 10 to 1,000.'
     return
   }
@@ -194,7 +194,7 @@ onMounted(()=>dialog.value.showModal())
     </template>
     <template v-else-if="lab.modal==='branch'">
       <p>Keep the committed history of {{ lab.run.setup.name }} and change plant supply from the next day.</p>
-      <label class="dialog-field">Branch after day <input type="number" v-model.number="branchDay" min="1" :max="lab.completed"></label>
+      <label class="dialog-field">Branch after day <input type="number" v-model.number="branchDay" min="1" :max="lab.latestBranchDay"></label>
       <label class="dialog-field">Plants per day <input type="number" v-model.number="branchFood" min="10" max="1000"></label>
       <p class="destination">First changed day {{ Number(branchDay)+1 }} · Seed {{ lab.run.setup.seed }}</p>
       <footer><button class="secondary" @click="close">Cancel</button><button class="secondary" @click="createBranch(true)">Edit branch rules</button>

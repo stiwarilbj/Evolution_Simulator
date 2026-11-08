@@ -18,3 +18,4 @@
 - Fixed Run Library resume so switching between runs keeps completed days that are still waiting to save.
 - Fixed the mutation profile menu so it shows the selected species' current trait settings.
 - Cleared the old species Undo when discarding a settings draft so it cannot add a duplicate.
+- Fixed Branch here so it offers earlier completed days while viewing the last day of a run.

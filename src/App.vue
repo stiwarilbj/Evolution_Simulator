@@ -250,7 +250,7 @@ onUnmounted(() => {
         <small>Seed {{ lab.run.setup.seed }} · Saved through Day {{ lab.saved }}</small>
         <button @click="task('library')">Run Library</button>
         <button @click="compare()">Compare runs</button>
-        <button :disabled="!lab.completed || lab.viewing>=lab.run.setup.days" @click="task('branch')">Branch here</button>
+        <button :disabled="!lab.latestBranchDay" @click="task('branch')">Branch here</button>
         <button v-if="canLive" @click="go('viewer'); lab.prepareOrLive()">Back to Live</button>
         <button @click="task('tour')">Show tour</button>
       </div>

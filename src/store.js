@@ -65,6 +65,7 @@ export const useLab = defineStore('lab', () => {
   const settings = ref(false), draft = ref(null), modal = ref(null), targetDay = ref(null), branchFrom = ref(null)
   const downloadRange = shallowRef(null)
   const completed = computed(() => run.value ? last(run.value) : 0)
+  const latestBranchDay = computed(() => Math.min(completed.value, (run.value?.setup.days ?? 1) - 1))
   const displayDuration = computed(() => frame.value?.duration ?? (run.value?.setup.duration ?? 100) / 10)
   const liveDay = computed(() => liveFrame.value?.day ?? completed.value + 1)
   const canEnterLive = computed(() => workerReady.value && !batch.value && completed.value < (run.value?.setup.days ?? 0))
@@ -662,7 +663,7 @@ export const useLab = defineStore('lab', () => {
 
   return { run, library, frame, viewing, liveFrame, liveDay, replay, playing, rate, through, scope, loading, batch, saved,
     error, workerReady, connecting, workerError, retrySimulation, replayDay, replayFailure, cancelReplay, retryReplay,
-    canEnterLive, canMoveNext, selected, following, settings, draft, modal, completed, displayDuration, status, init, openDay, goLive, seek, play,
+    canEnterLive, canMoveNext, selected, following, settings, draft, modal, completed, latestBranchDay, displayDuration, status, init, openDay, goLive, seek, play,
     stopPlayback, stepOnce, moveDay, simulate, stopBatch, extend, openSettings, closeSettings, evolve, switchRun, rename,
     remove, getTrack, branch, prepareOrLive, targetDay, quickForDay, branchFrom, importBranch, preparePair, openDownload, downloadRange }
 })
