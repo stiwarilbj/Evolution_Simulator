@@ -394,6 +394,37 @@ test('Trends downloads the filtered days and checks that CSV bounds are whole da
   expect(data.map(row => [row[dayIndex], row[scopeIndex]])).toEqual([['2', 'blue'], ['3', 'blue']])
 })
 
+test('Trends chart actions stay inside the selected day range', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page)
+  await quickThrough(page, 5)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 5')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  const trends = page.getByRole('link', { name: 'Trends', exact: true })
+  await trends.click()
+
+  const chart = page.getByRole('img', { name: /^Population by generation/ })
+  const range = page.getByRole('combobox', { name: 'Range', exact: true })
+  const pin = page.getByText('Day 5 · Pinned', { exact: true })
+  await chart.press('End')
+  await expect(pin).toBeVisible()
+
+  await range.selectOption('custom')
+  await page.getByRole('spinbutton', { name: 'From day', exact: true }).fill('2')
+  await page.getByRole('spinbutton', { name: 'To day', exact: true }).fill('3')
+  await chart.press('Enter')
+  await expect(pin).toHaveCount(0)
+  await expect(trends).toHaveAttribute('aria-current', 'page')
+
+  await range.selectOption('all')
+  await expect(pin).toBeVisible()
+  await range.selectOption('custom')
+  await chart.press('Home')
+  await expect(page.getByText('Day 2 · Pinned', { exact: true })).toBeVisible()
+  await chart.press('Enter')
+  await expect(page.getByRole('button', { name: 'Run options' })).toHaveText('Day 2 / 10 · Replay')
+})
+
 test('Food and Births and Deaths can be hidden and restored by name', async ({ page }) => {
   await openSimulator(page)
   await startRun(page)

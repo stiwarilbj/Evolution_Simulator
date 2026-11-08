@@ -27,3 +27,4 @@
 - Turning off Play Through now cancels the automatic move to the next replay, even if it has started loading.
 - Fixed branching from an earlier day so a new branch starts with the rules from that day. Changing the plant count no longer brings in a later day length or other rules.
 - Canceling Quick Sim now leaves a finished replay at the end and still resumes live playback if the dialog paused it.
+- Fixed Trends so chart shortcuts and the pinned summary respect the selected day range. A pin appears again when its day is back in view.

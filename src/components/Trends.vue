@@ -20,7 +20,7 @@ const rows=computed(()=>{
   const visible=range.value==='all'?source:range.value==='custom' ? source.filter(d=>d.day>=from.value && d.day<=to.value) : source.slice(-Number(range.value))
   return visible.map(d=>({day:d.day,...d.rows[lab.scope],scopes:d.rows}))
 })
-const pinned=computed(()=>pin.value ? lab.run.summaries[pin.value-1]?.rows[lab.scope] : null)
+const pinned=computed(()=>rows.value.find(row=>row.day===pin.value)?.scopes[lab.scope])
 const annotations=computed(()=>{
   const { setup, revisions, summaries } = lab.run
   const rules = revisions.length ? revisions : [{ day: 1, setup }]

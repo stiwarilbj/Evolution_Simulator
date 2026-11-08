@@ -13,7 +13,8 @@ const canvas = ref(), hovered = ref(null)
 let chart, brush, ignoreClick = false
 const hidden = ref([])
 const keys = computed(() => props.series.filter(s=>s.key!==false))
-const active = computed(() => hovered.value ?? props.pin)
+const active = computed(() =>
+  [hovered.value, props.pin].find(day => day != null && props.rows.some(row => row.day === day)) ?? null)
 const hasSamples = computed(() => props.series.some(series => props.rows.some(row => series.value(row) != null)))
 function toggle(label) {
   hidden.value=hidden.value.includes(label) ? hidden.value.filter(x=>x!==label) : [...hidden.value,label]
