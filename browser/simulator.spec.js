@@ -348,6 +348,52 @@ test('renaming the active run keeps days whose saves are still pending', async (
   await expect(dayTile(page, 3)).toBeVisible()
 })
 
+test('a copied setup link keeps the shared settings after reload', async ({ page, context, browser }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await openSimulator(page)
+  await startRun(page, '10', async () => {
+    await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('321')
+    await page.getByRole('spinbutton', { name: 'Random seed' }).fill('37')
+  })
+  await page.getByRole('button', { name: 'Run options' }).click()
+  await page.getByRole('button', { name: 'Run Library' }).click()
+  const run = page.getByRole('dialog', { name: 'Run Library' }).locator('article').filter({ hasText: 'Browser test run' })
+  await run.getByText('Actions', { exact: true }).click()
+  await run.getByRole('button', { name: 'Copy setup link' }).click()
+  await expect(page.getByText('Setup link copied. It opens a new experiment draft.')).toBeVisible()
+  const link = await page.evaluate(() => navigator.clipboard.readText())
+  expect(link).toContain('#/setup/')
+
+  const recipient = await browser.newPage()
+  try {
+    const settings = recipient.getByRole('dialog', { name: 'Simulation Settings' })
+    const name = settings.getByLabel('Run name')
+    const food = settings.getByRole('spinbutton', { name: 'Food', exact: true })
+    await recipient.goto(link)
+    await expect(name).toHaveValue('Browser test run')
+    await expect(food).toHaveValue('321')
+
+    await recipient.reload()
+    await expect(name).toHaveValue('Browser test run')
+    await expect(food).toHaveValue('321')
+    await expect(settings.getByRole('spinbutton', { name: 'Random seed' })).toHaveValue('37')
+    await expect(recipient).toHaveURL(link)
+
+    await settings.getByRole('button', { name: 'Close settings' }).click()
+    await expect(recipient).toHaveURL(/#\/r\/[^/]+\/s\/\d+\/viewer$/)
+    await recipient.reload()
+    await expect(recipient.getByRole('button', { name: 'Simulation Settings' })).toBeEnabled()
+    await expect(settings).toHaveCount(0)
+
+    await recipient.goto(link)
+    await settings.getByRole('button', { name: 'Evolve!' }).click()
+    await expect(recipient.getByRole('button', { name: 'Run options' })).toHaveText('Day 1 / 10 · Ready')
+    await expect(recipient).toHaveURL(/#\/r\/[^/]+\/s\/1\/viewer$/)
+  } finally {
+    await recipient.close()
+  }
+})
+
 test('Watch creature follows a newborn at dusk or at the next recorded dawn', async ({ page }) => {
   await openSimulator(page)
   await startRun(page, '10', () => page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('400'))

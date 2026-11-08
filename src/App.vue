@@ -21,7 +21,7 @@ const page = ref(initialPage), ready = ref(false), menu = ref(false), world = re
 const comparison = ref(readComparison(new URLSearchParams(initialAddress?.[4])))
 const comparisonVersion = ref(0), visited = ref({ viewer:true,[initialPage]:true })
 const scrolls = new Map()
-let navigating = false, routeRequest = 0, retryNavigation
+let navigating = false, routeRequest = 0, retryNavigation, sharedSetupHash
 
 function readComparison(query) {
   return { left:query.get('left') ?? '', right:query.get('right') ?? '', day:Number(query.get('pairDay')) || null }
@@ -37,6 +37,10 @@ function address(view = page.value, day = lab.viewing, settings = lab.settings) 
   }
   if (settings) query.set('cfg','1')
   return '#/r/'+lab.run.id+'/s/'+day+'/'+view+(query.size ? '?'+query : '')
+}
+function syncAddress() {
+  if (lab.settings && location.hash === sharedSetupHash) return
+  history.replaceState(null,'',address())
 }
 const canLive = computed(() => lab.replay && (lab.canEnterLive ||
   lab.batch?.label==='Preparing' && !lab.batch.stopping && lab.completed < lab.run.setup.days))
@@ -62,6 +66,7 @@ function show(view) {
 function beginNavigation() {
   lab.cancelReplay()
   retryNavigation = null
+  sharedSetupHash = null
   navigating = false
   return ++routeRequest
 }
@@ -81,6 +86,7 @@ async function applyAddress(hash = location.hash) {
       const setup=setupFromLink(hash)
       if (Object.keys(validate(setup)).length) throw new Error()
       lab.openSettings(setup)
+      sharedSetupHash = hash
     } catch { lab.error='This experiment link contains an invalid setup.' }
     return
   }
@@ -164,7 +170,7 @@ function openComparison(pair) {
 }
 function comparisonChanged(pair) {
   comparison.value = pair
-  if (ready.value && !navigating && page.value==='compare') history.replaceState(null,'',address())
+  if (ready.value && !navigating && page.value==='compare') syncAddress()
 }
 function settings(setup) {
   beginNavigation()
@@ -196,7 +202,7 @@ watch(() => [lab.run?.id,lab.viewing,lab.settings], ([id], [previousId]) => {
   if (id!==previousId) {
     show('viewer')
     history.pushState(null,'',address())
-  } else history.replaceState(null,'',address())
+  } else syncAddress()
 })
 onMounted(async () => {
   let firstVisit=false
