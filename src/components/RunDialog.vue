@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { CircleX, Download, FastForward, Upload } from 'lucide-vue-next'
 import { useLab } from '../store.js'
 import { METRICS, format, metricValue } from '../engine/stats.js'
-import { starter, randomSeed, validate } from '../engine/config.js'
+import { starter, randomSeed, rulesFor, validate } from '../engine/config.js'
 import { csv, download, setupLink } from '../export.js'
 
 const lab=useLab()
@@ -89,16 +89,21 @@ async function importSetup(event) {
   } catch { message.value='Choose a valid setup JSON file.' }
 }
 async function createBranch(edit=false) {
-  const setup=JSON.parse(JSON.stringify(lab.run.setup))
   if(!Number.isInteger(branchDay.value)||branchDay.value<1||branchDay.value>lab.latestBranchDay||
      !Number.isInteger(branchFood.value)||branchFood.value<10||branchFood.value>1000){
     message.value='Choose a completed day before the run limit and a food count from 10 to 1,000.'
     return
   }
-  setup.name=(setup.name+' · branch').slice(0,60)
-  setup.food=branchFood.value
-  setup.scheduleMode='constant'
-  setup.schedule=[]
+  const { setup: current, revisions } = lab.run
+  const setup = {
+    ...JSON.parse(JSON.stringify(rulesFor(current, revisions, branchDay.value))),
+    name: (current.name + ' · branch').slice(0,60),
+    days: current.days,
+    mode: current.mode,
+    food: branchFood.value,
+    scheduleMode: 'constant',
+    schedule: [],
+  }
   if(edit) { lab.openSettings(setup,branchDay.value); return }
   try { await lab.branch(branchDay.value,setup); emit('world') }
   catch(error){message.value=error.message}
