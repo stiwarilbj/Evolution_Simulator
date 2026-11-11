@@ -53,21 +53,46 @@ test('dawn balances all four edges, resets credits and capacity, and keys food b
 })
 
 test('the hunt threshold is inclusive, same-species configurable, and hunting counts as food', () => {
-  const config = starter()
-  const field = dawn(config, 1, founders(config))
-  const [hunter, prey] = field.blobs
-  field.blobs = [hunter, prey]
-  field.plants = []
-  Object.assign(hunter, { x: 100, y: 100, size: 12 })
-  Object.assign(prey, { x: 100, y: 100, size: 10 })
-  assert.equal(canHunt(hunter, prey, config), true)
-  assert.equal(canHunt({ ...hunter, size: 11.999 }, prey, config), false)
-  assert.equal(canHunt(hunter, prey, { ...config, sameSpecies: false }), false)
-  step(field, config)
-  assert.equal(prey.alive, false)
-  assert.equal(hunter.credits, 1)
-  assert.equal(field.events.filter(e => e.type === 'prey').length, 1)
-  assert.equal(field.events.filter(e => e.cause === 'Predation').length, 1)
+  const defaults = starter()
+  assert.equal(defaults.preyReward, 0)
+  for (const config of [defaults, { ...defaults, preyReward: 30 }]) {
+    const field = dawn(config, 1, founders(config))
+    const [hunter, prey] = field.blobs
+    field.blobs = [hunter, prey]
+    field.plants = []
+    Object.assign(hunter, { x: 100, y: 100, size: 12, energy: 400 })
+    Object.assign(prey, { x: 100, y: 100, size: 10 })
+    assert.equal(canHunt(hunter, prey, config), true)
+    assert.equal(canHunt({ ...hunter, size: 11.999 }, prey, config), false)
+    assert.equal(canHunt(hunter, prey, { ...config, sameSpecies: false }), false)
+    step(field, config)
+    assert.equal(prey.alive, false)
+    assert.equal(hunter.credits, 1)
+    assert.equal(hunter.preyCredits, 1)
+    const [hunt] = field.events.filter(e => e.type === 'prey')
+    assert.equal(hunt.energy, hunt.beforeEnergy + config.preyReward)
+    assert.equal(field.events.filter(e => e.cause === 'Predation').length, 1)
+  }
+})
+
+test('plants give one credit and only refill energy when configured', () => {
+  const defaults = starter()
+  assert.equal(defaults.plantReward, 0)
+  for (const config of [defaults, { ...defaults, plantReward: 30 }]) {
+    const field = dawn(config, 1, founders(config))
+    const [blob] = field.blobs
+    field.blobs = [blob]
+    field.plants = [{ id:0, x:100, y:100, eaten:false }]
+    Object.assign(blob, { x:100, y:100 })
+    step(field, config)
+    assert.equal(field.plants[0].eaten, true)
+    assert.equal(blob.credits, 1)
+    const bite = field.events[0]
+    assert.equal(bite.type, 'plant')
+    assert.equal(bite.beforeEnergy, 489.998)
+    assert.equal(bite.energy, Math.min(blob.capacity, bite.beforeEnergy + config.plantReward))
+    assert.equal(blob.energy, bite.energy)
+  }
 })
 
 test('energy depletes immediately and a zero-energy collision cannot feed or reproduce', () => {

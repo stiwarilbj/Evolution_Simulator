@@ -12,7 +12,7 @@ export function starter() {
   return {
     version: VERSION, name: 'Starter field', days: 50, duration: 100, seed: 18, food: 50,
     mode: 'prepare', predation: true, sameSpecies: true, stride: 'linked', metabolism: 'walkthrough',
-    plantReward: 30, preyReward: 30, schedule: [], scheduleMode: 'constant',
+    plantReward: 0, preyReward: 0, schedule: [], scheduleMode: 'constant',
     species: [speciesTemplate('blue', 'Blue', PALETTE[0], 50),
       { ...speciesTemplate('orange', 'Orange', PALETTE[1], 10, false), sense: 50 },
       { ...speciesTemplate('pink', 'Pink', PALETTE[2], 10, false), speed: 9, size: 9 }]

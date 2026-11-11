@@ -132,7 +132,11 @@ test('the production build runs a new experiment and shows its charts @pages', a
   }
   await openSimulator(page)
   await expect(page.getByRole('heading', { name: 'Current Generation Stats' })).toBeVisible()
-  await startRun(page)
+  await startRun(page, '10', async () => {
+    await page.getByRole('button', { name: /^Refill rewards/ }).click()
+    await expect(page.getByRole('spinbutton', { name: 'Plant reward' })).toHaveValue('0')
+    await expect(page.getByRole('spinbutton', { name: 'Prey reward' })).toHaveValue('0')
+  })
   await quickThrough(page, 3)
   await expect(page.getByRole('heading', { name: 'Simulation complete' })).toBeVisible()
   await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
@@ -857,7 +861,7 @@ test('Trends compares sight spread in the filtered days and opens each closing c
 
   const world = page.locator('main.world')
   const clock = page.getByRole('slider', { name: 'Replay time' })
-  for (const [day, label, count, spread] of [[2, 'Narrowest', 190, '0.54'], [3, 'Widest', 281, '0.67']]) {
+  for (const [day, label, count, spread] of [[2, 'Narrowest', 188, '0.50'], [3, 'Widest', 269, '0.62']]) {
     const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name: label + ' spread · Day ' + day }) })
     await expect(card.getByText(String(count), { exact: true })).toBeVisible()
     await expect(card.getByText(spread, { exact: true })).toBeVisible()
@@ -907,18 +911,18 @@ test('Trait Space shows exact ages and newborn shares for both days and the sele
   const table = page.getByRole('table', { name: 'Living blobs by age' })
   await expect(table.getByRole('columnheader')).toHaveText(['Age (days)', 'Day 3', 'Day 2'])
   const cells = label => table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: label, exact: true }) }).getByRole('cell')
-  await expect(cells('0')).toHaveText(['129', '92'])
-  await expect(cells('3')).toHaveText(['41', '0'])
-  await expect(cells('Living blobs')).toHaveText(['281', '190'])
-  await expect(cells('Newborn share')).toHaveText(['45.9%', '48.4%'])
+  await expect(cells('0')).toHaveText(['120', '91'])
+  await expect(cells('3')).toHaveText(['36', '0'])
+  await expect(cells('Living blobs')).toHaveText(['269', '188'])
+  await expect(cells('Newborn share')).toHaveText(['44.6%', '48.4%'])
   await expect(page.getByRole('spinbutton', { name: 'Bins' })).toHaveCount(0)
   await page.getByRole('checkbox', { name: 'Percentage' }).check()
-  await expect(cells('0')).toHaveText(['45.9%', '48.4%'])
+  await expect(cells('0')).toHaveText(['44.6%', '48.4%'])
   await page.getByLabel('Filter By Species').selectOption('orange')
-  await expect(cells('Living blobs')).toHaveText(['71', '39'])
+  await expect(cells('Living blobs')).toHaveText(['77', '39'])
   await compare.fill('0')
   await compare.press('Tab')
-  await expect(cells('Living blobs')).toHaveText(['71'])
+  await expect(cells('Living blobs')).toHaveText(['77'])
 })
 
 test('Trait Space keeps selections within the species filter and only loads whole days', async ({ page }) => {
@@ -1337,7 +1341,7 @@ test('Watch creature follows a newborn at dusk or at the next recorded dawn', as
   await expect(current).toBeVisible()
 })
 
-test('creature details show refuge distance while a replayed blob is returning', async ({ page }) => {
+test('replay shows food credits without refills and refuge distance while returning', async ({ page }) => {
   await openSimulator(page)
   await startRun(page)
   await quickThrough(page, 1)
@@ -1352,6 +1356,14 @@ test('creature details show refuge distance while a replayed blob is returning',
   const time = page.getByRole('slider', { name: 'Replay time' })
   const distance = details.getByText(/^\d[\d,.]* units from the nearest refuge$/)
   await expect(distance).toHaveCount(0)
+
+  const credits = details.getByText('Food credits', { exact: true }).locator('xpath=following-sibling::dd[1]')
+  await time.fill('0.4')
+  await expect(credits).toHaveText('0')
+  await expect(details.getByText('460.0 / 500 energy')).toBeVisible()
+  await time.fill('0.5')
+  await expect(credits).toHaveText('1')
+  await expect(details.getByText('450.0 / 500 energy')).toBeVisible()
 
   // In the starter setup, founder #1 heads home by 1 s and reaches the edge before 2 s.
   await time.fill('1')

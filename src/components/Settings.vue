@@ -142,7 +142,7 @@ onMounted(()=>dialog.value.showModal())
               <NumberField v-for="key in TRAITS" :id="selected.id+'.'+key" :key="key" v-model="selected[key]" :label="labels[key]"
                 :min="1" :max="100" :tint="swatches[key]" :error="issue[selected.id+'.'+key]"/>
             </div>
-            <small class="quiet">{{ travel(selected,draft).toFixed(0) }} units/s · {{ Number.isFinite(endurance) ? endurance.toFixed(1) : '—' }} s of movement before refills</small>
+            <small class="quiet">{{ travel(selected,draft).toFixed(0) }} units/s · {{ Number.isFinite(endurance) ? endurance.toFixed(1) : '—' }} s of movement on starting energy</small>
           </div>
         </div>
       </section>
@@ -176,7 +176,7 @@ onMounted(()=>dialog.value.showModal())
         <div v-if="rewards" class="setting-inset">
           <NumberField id="plantReward" v-model="draft.plantReward" label="Plant reward" :min="0" :max="1000" :pace="100" tint="#6C7C3A" :error="issue.plantReward"/>
           <NumberField id="preyReward" v-model="draft.preyReward" label="Prey reward" :min="0" :max="1000" :pace="100" tint="#8F8048" :error="issue.preyReward"/>
-          <p class="quiet">Each successful bite gives one food credit.</p>
+          <p class="quiet">Each plant or prey gives one food credit. A refill of 0 leaves energy unchanged. Higher values restore energy up to the blob’s starting amount.</p>
           <button type="button" class="secondary" @click="draft.preyReward=draft.plantReward">Equal rewards</button>
         </div>
         <div v-if="draft.scheduleMode!=='constant'" class="setting-inset">

@@ -15,7 +15,7 @@ let frameId, previous=0, closed=false
 const chapters=[
   ['Welcome to the tabletop','Every blob begins at an edge. The olive pellets are food, and the pale strip is refuge.'],
   ['Find food','Follow a creature on its way to its first pellet. Turn on the pale sensing circle and watch the pellet disappear on contact.'],
-  ['Spend energy','The energy halo drains as a creature moves. A bite adds a small refill and earns one food credit.'],
+  ['Spend energy','The energy halo drains as a creature moves. Each bite earns one food credit without refilling energy.'],
   ['Go home','With two credits, a blob heads for the nearest viable refuge. It stops spending energy as soon as it reaches safety.'],
   ['See a birth','At dusk, a rested parent with two credits has one child. Each unlocked trait varies around the parent’s value.'],
   ['Read the experiment','The timeline and Trends turn each completed day into measurements. Start with the example, or design your own experiment in Settings.']
