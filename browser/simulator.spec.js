@@ -1142,6 +1142,48 @@ test('replay stops at the next live day and the saved results survive a reload',
   await expect(nextDay).toBeDisabled()
 })
 
+test('playback actions disable advancing at dusk and work again on the next day', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page, '10', async () => {
+    await page.getByRole('spinbutton', { name: 'Seconds per day', exact: true }).fill('1')
+  })
+  const actions = page.getByRole('button', { name: 'Playback actions' })
+  const finish = page.getByRole('button', { name: 'Finish Day', exact: true })
+  const step = page.getByRole('button', { name: 'Step one tick', exact: true })
+  const end = page.getByRole('button', { name: 'Go to end', exact: true })
+  const elapsed = page.getByRole('progressbar', { name: 'Current day elapsed' })
+  const through = page.getByRole('button', { name: 'Play through generations' })
+  await expect(through).toHaveAttribute('aria-pressed', 'true')
+  await through.click()
+
+  await actions.click()
+  await step.click()
+  await expect(elapsed).toHaveAttribute('aria-valuenow', '0.05')
+  await page.getByRole('button', { name: 'Play', exact: true }).click()
+  await expect(elapsed).toHaveAttribute('aria-valuenow', '1')
+  await actions.click()
+  await expect(finish).toBeDisabled()
+  await expect(step).toBeDisabled()
+
+  await page.getByRole('button', { name: 'Next day', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Run options' })).toHaveText('Day 2 / 10 · Ready')
+  await expect(elapsed).toHaveAttribute('aria-valuenow', '0')
+  await expect(step).toBeEnabled()
+  await finish.click()
+
+  const replay = page.getByRole('slider', { name: 'Replay time' })
+  await expect(replay).toHaveValue('1')
+  await actions.click()
+  await expect(end).toBeDisabled()
+  await expect(step).toBeDisabled()
+  await replay.fill('0.5')
+  await step.click()
+  await expect(replay).toHaveValue('0.55')
+  await actions.click()
+  await end.click()
+  await expect(replay).toHaveValue('1')
+})
+
 test('turning off Play Through cancels an automatic replay that is still loading', async ({ page }) => {
   await delayReplays(page)
   await openSimulator(page)

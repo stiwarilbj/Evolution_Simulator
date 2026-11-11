@@ -56,6 +56,7 @@ const speedRange = computed(() => {
 })
 const quickLabel = computed(() => lab.batch && lab.batch.label !== 'Preparing' ? 'Progress' : 'Quick Sim')
 const replayCanSeek = computed(() => lab.replay && !lab.loading)
+const canAdvanceDay = computed(() => !!lab.frame && fraction.value < 1 && !lab.loading && (lab.replay || lab.canEnterLive))
 function select(id) {
   lab.selected = id
   lab.following = id != null
@@ -198,8 +199,8 @@ defineExpose({ select, overhead:()=>{ lab.following=false; camera.value='overhea
         <button class="icon compact" aria-label="Close speed controls" @click="tool=null"><ChevronDown :size="16"/></button>
       </div>
       <div v-if="tool==='player'" class="pop player-menu">
-        <button :disabled="lab.loading || !lab.replay && (!lab.workerReady || !!lab.batch)" @click="endDay">{{ lab.replay ? 'Go to end' : 'Finish Day' }}</button>
-        <button :disabled="lab.loading || !lab.replay && (!lab.workerReady || !!lab.batch)" @click="lab.stepOnce(); tool=null">Step one tick</button>
+        <button :disabled="!canAdvanceDay" @click="endDay">{{ lab.replay ? 'Go to end' : 'Finish Day' }}</button>
+        <button :disabled="!canAdvanceDay" @click="lab.stepOnce(); tool=null">Step one tick</button>
         <button v-if="lab.completed" @click="lab.openDay(lab.completed); tool=null">Go to frontier</button>
         <button v-if="lab.replay && lab.canEnterLive" @click="lab.goLive(); tool=null">Back to Live</button>
       </div>

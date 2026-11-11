@@ -42,3 +42,4 @@
 - Kept the dark background in chart PNG downloads so the light lines and labels stay readable.
 - Fixed Jump to chart so it scrolls to Overview with both separate and combined scales.
 - Added a retry in Trait Space so a failed day can load again without changing the selection.
+- Fixed playback actions that stayed enabled at the end of a live or recorded day.
