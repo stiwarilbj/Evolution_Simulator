@@ -7,6 +7,7 @@ import { listRuns, saveRun, saveRunPair, deleteRun } from './archive.js'
 import { prepareTrack, trackFrame } from './track.js'
 
 const createWorker = () => new Worker(new URL('./engine/worker.js', import.meta.url), { type: 'module' })
+const WORKER_STARTUP_TIMEOUT = 10_000
 const copy = value => JSON.parse(JSON.stringify(value))
 const makeRun = setup => {
   const initial = founders(setup)
@@ -24,8 +25,13 @@ function prepareExperiment(setup, signal, progress) {
   return new Promise((resolve, reject) => {
     const worker = createWorker()
     let experiment = makeRun(setup)
+    const startupTimer = setTimeout(() => {
+      fail(new Error('The experiment took too long to start. Try again.'))
+    }, WORKER_STARTUP_TIMEOUT)
     function cleanup() {
+      clearTimeout(startupTimer)
       signal.removeEventListener('abort', abort)
+      worker.onmessage = worker.onerror = worker.onmessageerror = null
       worker.terminate()
     }
     function fail(error) {
@@ -34,9 +40,17 @@ function prepareExperiment(setup, signal, progress) {
     }
     function abort() { fail(signal.reason) }
     signal.addEventListener('abort', abort, { once:true })
-    worker.onerror = () => fail(new Error('The experiment worker stopped. Try again.'))
+    function workerFailed() { fail(new Error('The experiment worker stopped. Try again.')) }
+    function send(message) {
+      try { worker.postMessage(message) }
+      catch { workerFailed() }
+    }
+    worker.onerror = worker.onmessageerror = workerFailed
     worker.onmessage = ({ data }) => {
-      if (data.type === 'ready') worker.postMessage({ type:'batch', target:setup.days })
+      if (data.type === 'ready') {
+        clearTimeout(startupTimer)
+        send({ type:'batch', target:setup.days })
+      }
       if (data.type === 'error') fail(new Error(data.message))
       if (data.type === 'commit') {
         experiment = recordDay(experiment, data)
@@ -48,7 +62,7 @@ function prepareExperiment(setup, signal, progress) {
         else resolve(experiment)
       }
     }
-    worker.postMessage({ type:'init', config:setup, checkpoint:experiment.latest })
+    send({ type:'init', config:setup, checkpoint:experiment.latest })
   })
 }
 
@@ -137,7 +151,7 @@ export const useLab = defineStore('lab', () => {
     const token = epoch
     connecting.value = true
     return new Promise(resolve => {
-      const timeout = setTimeout(() => fail('The simulation took too long to start.'), 10000)
+      const timeout = setTimeout(() => fail('The simulation took too long to start.'), WORKER_STARTUP_TIMEOUT)
       finishConnection = success => {
         clearTimeout(timeout)
         finishConnection = null

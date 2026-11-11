@@ -1124,6 +1124,49 @@ test('an unresponsive replay times out and can be retried', async ({ page }) => 
   await expect(retry).toHaveCount(0)
 })
 
+test('a stalled size-mutation experiment times out and can be run again', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker
+    let stalled
+    window.Worker = class extends NativeWorker {
+      postMessage(data) {
+        if (!stalled && data.type === 'init' && data.config.name.startsWith('Size variance · ')) {
+          stalled = this
+          return
+        }
+        return super.postMessage(data)
+      }
+      terminate() {
+        if (this === stalled) window.stalledPairWorkerTerminated = true
+        super.terminate()
+      }
+    }
+  })
+  await openSimulator(page)
+  await page.getByRole('link', { name: 'About', exact: true }).click()
+  const startPair = page.getByRole('button', { name: 'Run both and compare' })
+  await expect(startPair).toBeEnabled()
+  await page.clock.install()
+  await page.getByRole('spinbutton', { name: 'Seed', exact: true }).fill('20')
+  await startPair.click()
+  const progress = page.getByRole('progressbar', { name: 'Paired experiment progress' })
+  await expect(progress).toBeVisible()
+  await page.clock.fastForward(10_001)
+
+  await expect(page.getByRole('status').filter({ hasText: 'The experiment took too long to start. Try again.' })).toBeVisible()
+  await expect(progress).toHaveCount(0)
+  expect(await page.evaluate(() => window.stalledPairWorkerTerminated)).toBe(true)
+  await expect(page.getByRole('spinbutton', { name: 'Seed', exact: true })).toHaveValue('20')
+  await expect(startPair).toBeEnabled()
+
+  await startPair.click()
+  await expect(page.getByRole('heading', { name: 'Compare runs', exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('heading', { name: 'Day 1 results' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Play comparison' })).toBeEnabled()
+  await expect(page.getByRole('region', { name: 'Left run' }).getByRole('heading')).toHaveText(/Wide .* Seed 20/)
+  await expect(page.getByRole('region', { name: 'Right run' }).getByRole('heading')).toHaveText(/Narrow .* Seed 20/)
+})
+
 test('Compare keeps a cleared run selector empty when the page reloads', async ({ page }) => {
   await openSimulator(page)
   for (const name of ['Right archive', 'Left archive']) {
