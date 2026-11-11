@@ -36,7 +36,7 @@ const boardSize = 500
 const meshKinds = {}
 let renderer, canvas, ctx, orbit, resize, raf, down, previousFrame, height = 1, width = 1, dirty = true
 let contact, contactTexture
-let bodyIds = [], screenBlobs = [], followed = false, manual = false, previousTime = 0, lost = false
+let bodyIds = [], screenBlobs = [], followed = false, manual = false, previousTime = 0
 let lastPose, nextPose, poseChangedAt = 0, recentDeaths = new Set(), recentBites = new Map()
 const colors = new Map()
 const visionRim = Array.from({ length: 48 }, (_, i) =>
@@ -424,7 +424,7 @@ function draw(now) {
   const delta = Math.min(80, now-previousTime)
   previousTime = now
   const frame = props.frame
-  if (frame && !lost) {
+  if (frame) {
     const blobs = activeBlobs(frame, now)
     const blob = followedBlob.value && blobs.find(b => b.id === props.selected)
     const follow = !!blob
@@ -502,23 +502,7 @@ function move(event) {
   }
 }
 
-function setupRenderer() {
-  contact = makeContactShadow()
-  placeBoard()
-  meshes()
-  try {
-    renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, powerPreference:'high-performance' })
-    renderer.outputColorSpace = THREE.SRGBColorSpace
-    renderer.localClippingEnabled = true
-    renderer.setClearColor(stageColor)
-    canvas = renderer.domElement
-    canvas.addEventListener('webglcontextlost', event => { event.preventDefault(); lost = true; emit('fallback') })
-    canvas.addEventListener('webglcontextrestored', () => { lost = false; dirty = true })
-  } catch {
-    canvas = document.createElement('canvas')
-    ctx = canvas.getContext('2d')
-    emit('fallback')
-  }
+function mountCanvas() {
   canvas.className = 'world-canvas'
   canvas.setAttribute('aria-label','Interactive tabletop. Use the creature list to select a blob by name.')
   host.value.prepend(canvas)
@@ -536,9 +520,38 @@ function setupRenderer() {
   canvas.addEventListener('pointerdown',pointerDown)
   canvas.addEventListener('pointerup',pointerUp)
   canvas.addEventListener('pointercancel',()=>{ down=null })
+  fit()
+}
+
+function useCanvasFallback() {
+  orbit?.dispose()
+  canvas?.remove()
+  renderer?.dispose()
+  renderer = null
+  down = null
+  canvas = document.createElement('canvas')
+  ctx = canvas.getContext('2d')
+  mountCanvas()
+  emit('fallback')
+}
+
+function setupRenderer() {
+  contact = makeContactShadow()
+  placeBoard()
+  meshes()
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, powerPreference:'high-performance' })
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.localClippingEnabled = true
+    renderer.setClearColor(stageColor)
+    canvas = renderer.domElement
+    canvas.addEventListener('webglcontextlost', useCanvasFallback, { once:true })
+  } catch {
+    useCanvasFallback()
+  }
+  if (renderer) mountCanvas()
   resize = new ResizeObserver(fit)
   resize.observe(host.value)
-  fit()
   raf = requestAnimationFrame(draw)
 }
 watch(() => props.species, list => { for (const s of list ?? []) colors.set(s.id,s.color); dirty = true }, { immediate:true })
@@ -556,6 +569,7 @@ onBeforeUnmount(() => {
     object.geometry?.dispose()
     for (const material of [object.material].flat()) material?.dispose()
   })
+  canvas?.removeEventListener('webglcontextlost', useCanvasFallback)
   renderer?.dispose()
   renderer?.forceContextLoss()
 })

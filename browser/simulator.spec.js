@@ -189,6 +189,39 @@ test('World fits split windows and keeps its controls in full screen', async ({ 
   expect(await page.evaluate(() => window.scrollY)).toBe(0)
 })
 
+test('World continues drawing live playback after losing WebGL', async ({ page }) => {
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+  await openSimulator(page)
+  await startRun(page)
+
+  const field = page.getByRole('region', { name: 'Simulation field' })
+  const canvas = field.locator('canvas.world-canvas')
+  await page.getByRole('button', { name: 'Play', exact: true }).click()
+  const time = page.getByRole('progressbar', { name: 'Current day elapsed' })
+  const elapsed = async () => Number(await time.getAttribute('aria-valuenow'))
+  await expect.poll(elapsed).toBeGreaterThan(0)
+  const lost = await canvas.evaluate(element => {
+    const extension = element.getContext('webgl2')?.getExtension('WEBGL_lose_context')
+    extension?.loseContext()
+    return !!extension
+  })
+  expect(lost).toBe(true)
+  await expect(field.getByText('Canvas view', { exact: true })).toBeVisible()
+  await expect.poll(() => canvas.evaluate(element => {
+    const context = element.getContext('2d')
+    const pixel = context?.getImageData(element.width / 2, element.height / 2, 1, 1).data
+    return !!pixel && pixel[0] > 150 && pixel[3] === 255
+  })).toBe(true)
+  const fallbackTime = await elapsed()
+  const startingImage = await canvas.evaluate(element => element.toDataURL())
+
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeEnabled()
+  await expect.poll(elapsed).toBeGreaterThan(fallbackTime)
+  await expect.poll(() => canvas.evaluate((element, image) => element.toDataURL() !== image, startingImage)).toBe(true)
+  expect(errors).toEqual([])
+})
+
 test('Mini line points stay above their generation tiles when the window shrinks', async ({ page }) => {
   await openSimulator(page)
   await startRun(page)

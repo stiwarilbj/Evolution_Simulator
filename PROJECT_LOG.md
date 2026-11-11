@@ -38,3 +38,4 @@
 - Fixed Run Library so View results opens Trends for the active run without stopping Quick Sim.
 - Fixed Run both and compare so a worker that does not start shows an error and lets you try again.
 - Fixed Mini line so the generation chart can show Population and Age at Death.
+- Fixed the World view so it keeps drawing in Canvas when WebGL disconnects during a run.
