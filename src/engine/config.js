@@ -11,7 +11,7 @@ export function speciesTemplate(id, name, color, count = 10, enabled = true) {
 export function starter() {
   return {
     version: VERSION, name: 'Starter field', days: 50, duration: 100, seed: 18, food: 50,
-    mode: 'prepare', predation: true, sameSpecies: true, stride: 'linked', metabolism: 'product',
+    mode: 'prepare', predation: true, sameSpecies: true, stride: 'linked', metabolism: 'walkthrough',
     plantReward: 30, preyReward: 30, schedule: [], scheduleMode: 'constant',
     species: [speciesTemplate('blue', 'Blue', PALETTE[0], 50),
       { ...speciesTemplate('orange', 'Orange', PALETTE[1], 10, false), sense: 50 },
@@ -36,7 +36,7 @@ export function validate(config) {
   number('plantReward', 'Plant reward', config.plantReward, 0, 1000)
   number('preyReward', 'Prey reward', config.preyReward, 0, 1000)
   if (!['prepare', 'live'].includes(config.mode) || !['linked', 'speed'].includes(config.stride) ||
-      !['product', 'additive'].includes(config.metabolism) || typeof config.predation !== 'boolean' ||
+      !['walkthrough', 'product', 'additive'].includes(config.metabolism) || typeof config.predation !== 'boolean' ||
       typeof config.sameSpecies !== 'boolean') errors.rules = 'Choose supported simulation rules.'
   if (!Array.isArray(config.schedule) || !['constant', 'ramp', 'step'].includes(config.scheduleMode)) {
     errors.schedule = 'Choose a supported food schedule.'

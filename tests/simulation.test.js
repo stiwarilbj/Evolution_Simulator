@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { starter, plantsForDay, rulesFor, validate, validateRevisions } from '../src/engine/config.js'
-import { canHunt, cost, radius } from '../src/engine/geometry.js'
+import { canHunt, cost, radius, walkthroughStepCost } from '../src/engine/geometry.js'
 import { normal } from '../src/engine/random.js'
 import { dawn, dusk, founders, snapshot, step } from '../src/engine/simulation.js'
 import { distribution } from '../src/engine/stats.js'
@@ -110,13 +110,39 @@ test('dusk uses the survival thresholds and true Gaussian variance once per newb
 })
 
 test('product cost scales cubically in size, quadratically in speed, and linearly in sense', () => {
-  const config = starter(), b = config.species[0], baseline = cost(b, config)
+  const config = { ...starter(), metabolism:'product' }, b = config.species[0], baseline = cost(b, config)
   assert.equal(cost({ ...b, size:b.size*2 }, config), baseline*8)
   assert.equal(cost({ ...b, speed:b.speed*2 }, config), baseline*4)
   assert.equal(cost({ ...b, sense:b.sense*2 }, config), baseline*2)
   assert.equal(radius(100), 25)
   assert.ok(radius(200) - radius(100) < radius(100) - radius(1))
   assert.ok(radius(1e7) > radius(200))
+})
+
+test('the default charges the full video movement cost before a blob can eat', () => {
+  const config = starter()
+  const founder = config.species[0]
+  assert.equal(config.metabolism, 'walkthrough')
+  assert.equal(walkthroughStepCost(founder, config), 10.002)
+  assert.equal(walkthroughStepCost({ ...founder, size:20 }, config), 320.002)
+  assert.equal(walkthroughStepCost({ ...founder, size:20 }, { ...config, stride:'speed' }), 80.002)
+  assert.equal(walkthroughStepCost({ ...founder, sense:40 }, config), 10.004)
+
+  const field = dawn(config, 1, founders(config))
+  const [blob, exhausted] = field.blobs
+  field.blobs = [blob, exhausted]
+  field.plants = [{ id:0, x:200, y:200, eaten:false }]
+  Object.assign(blob, { x:100, y:100, angle:0 })
+  Object.assign(exhausted, { x:200, y:200, angle:0, energy:10.002 })
+  step(field, config)
+  assert.equal(snapshot(field).time, 0.1)
+  assert.equal(snapshot(field).duration, 10)
+  assert.ok(Math.abs(Math.hypot(blob.x - 100, blob.y - 100) - 10) < 1e-10)
+  assert.equal(blob.energy, 489.998)
+  assert.equal(exhausted.alive, false)
+  assert.equal(field.events[0].time, 0.1)
+  assert.equal(field.events[0].cause, 'Energy depletion')
+  assert.equal(field.plants[0].eaten, false)
 })
 
 test('an extinct run still records food and null trait statistics', () => {
@@ -180,15 +206,16 @@ test('CSV exports per-scope rows and distinguishes missing measurements from zer
 })
 
 test('branch histories keep founding traits and apply new food and duration only after the fork', () => {
-  const original = starter()
-  const branch = { ...original, food:80, duration:200 }
+  const original = { ...starter(), metabolism:'product' }
+  const branch = { ...original, food:80, duration:200, metabolism:'walkthrough' }
   const revisions = [{ day:1, setup:original }, { day:3, setup:branch }]
   assert.equal(validateRevisions(branch,revisions),true)
   let result = { checkpoint:founders(original) }
   for (let day=1; day<=3; day++) {
     const rules = rulesFor(branch,revisions,day)
     const state = dawn(rules,day,result.checkpoint)
-    assert.equal(state.limit,day<3?200:400)
+    assert.equal(state.stepSeconds, day < 3 ? .05 : .1)
+    assert.equal(snapshot(state).duration, day < 3 ? 10 : 20)
     result = step(state,rules,state.limit,true)
     assert.equal(result.summary.rows.all.food,day<3?50:80)
   }

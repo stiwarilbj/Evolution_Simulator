@@ -540,7 +540,7 @@ export const useLab = defineStore('lab', () => {
 
   function stepOnce() {
     stopPlayback()
-    if (replay.value) seek(cursor + DT)
+    if (replay.value) seek(cursor + (track?.stepSeconds ?? DT))
     else if (workerReady.value && !loading.value && !pending && !batch.value && frame.value?.time < displayDuration.value) {
       pending = true
       writer.postMessage({ type: 'advance', ticks: 1 })
@@ -572,9 +572,10 @@ export const useLab = defineStore('lab', () => {
         }
       } else if (!batch.value) {
         remainder = Math.min(0.4, remainder + delta)
-        if (remainder >= DT && !pending) {
-          const ticks = Math.floor(remainder / DT)
-          remainder -= ticks * DT
+        const seconds = liveFrame.value?.stepSeconds ?? DT
+        if (remainder >= seconds && !pending) {
+          const ticks = Math.floor(remainder / seconds)
+          remainder -= ticks * seconds
           pending = true
           writer.postMessage({ type: 'advance', ticks })
         }

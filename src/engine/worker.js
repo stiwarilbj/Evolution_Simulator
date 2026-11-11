@@ -1,5 +1,4 @@
 import { dawn, founders, step, snapshot } from './simulation.js'
-import { DT } from './geometry.js'
 import { rulesFor } from './config.js'
 
 const pause = () => new Promise(resolve => setTimeout(resolve, 0))
@@ -94,7 +93,8 @@ async function replay(message) {
     advanceReplay(state, rules, stride)
     sample()
   }
-  postMessage({ type: 'track', id, track: { day, duration: state.limit * DT, ticks: state.limit, stride,
+  postMessage({ type: 'track', id, track: { day, duration: state.limit * state.stepSeconds,
+    stepSeconds: state.stepSeconds, ticks: state.limit, stride,
     opening, plants, frames, events: state.events, checkpoint: state.settled.checkpoint, final: snapshot(state) } }, [frames.buffer])
 }
 

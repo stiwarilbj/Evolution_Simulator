@@ -52,3 +52,4 @@
 - Fixed Creature Details so replays show the distance to the nearest refuge while a blob is returning.
 - Added a retry for failed Trait Space comparisons so the main day and selected creature stay in view.
 - Added a sight range comparison in Trends that opens the narrowest and widest days from above at dusk. Added exact age counts and newborn shares in Trait Space.
+- Made the video's additive movement cost the default for new runs. Blobs pay the full cost for each 0.1-second move, and saved runs keep their original energy rules.

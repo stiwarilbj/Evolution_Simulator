@@ -6,7 +6,7 @@ import { useLab } from '../store.js'
 import { STATES } from '../engine/simulation.js'
 import { rulesFor } from '../engine/config.js'
 import { format } from '../engine/stats.js'
-import { cost, homePoints, radius, travel } from '../engine/geometry.js'
+import { cost, homePoints, radius, travel, walkthroughStepCost } from '../engine/geometry.js'
 import Board from './Board.vue'
 import Flower from './Flower.vue'
 import Ribbon from './Ribbon.vue'
@@ -29,6 +29,12 @@ const visible = computed(() => lab.frame?.blobs.find(b => b.id===lab.selected))
 const creatureState = computed(() => STATES[visible.value?.state])
 const species = computed(() => lab.run.setup.species.find(s => s.id===visible.value?.species))
 const rules = computed(() => rulesFor(lab.run.setup,lab.run.revisions,lab.frame?.day ?? lab.viewing))
+const movementCost = computed(() => {
+  const blob = visible.value
+  if (!blob) return ''
+  return rules.value.metabolism==='walkthrough' ?
+    format(walkthroughStepCost(blob,rules.value),3)+' per step' : format(cost(blob,rules.value),1)+'/s'
+})
 const cohort = computed(() => {
   const frame = lab.frame
   if (!frame || !visible.value) return {}
@@ -237,7 +243,7 @@ defineExpose({ select, overhead })
           <dl><template v-for="[name,value] in [
             ['Age',visible.age+' days'],['Food credits',visible.credits],['Speed',format(visible.speed)],['Size',format(visible.size)],
             ['Sense range',format(visible.sense)],['Travel rate',format(travel(visible,rules),1)+' units/s'],
-            ['Body radius',format(radius(visible.size),2)],['Energy cost',format(cost(visible,rules),1)+'/s'],
+            ['Body radius',format(radius(visible.size),2)],['Energy cost',movementCost],
             ['Born', 'Day '+visible.born],['Parent',visible.parent ? '#'+visible.parent : 'Founder']
           ]" :key="name"><dt>{{ name }}</dt><dd>{{ value }}</dd></template></dl>
           <h3>Events</h3>

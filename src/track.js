@@ -12,9 +12,10 @@ export function prepareTrack(track) {
 
 export function trackFrame(track, time) {
   if (time >= track.duration - 1e-8) return track.final
-  const { stride, opening, frames, changes, eaten } = track
-  const index = Math.floor(time / (DT * stride))
-  const aTime = index * DT * stride, bTime = Math.min(track.duration, aTime + DT * stride)
+  const { stepSeconds = DT, stride, opening, frames, changes, eaten } = track
+  const interval = stepSeconds * stride
+  const index = Math.floor(time / interval)
+  const aTime = index * interval, bTime = Math.min(track.duration, aTime + interval)
   const row = opening.length * 7
   const blobs = opening.map((blob, i) => {
     const p = index * row + i * 7, q = p + row
@@ -41,6 +42,6 @@ export function trackFrame(track, time) {
     return { ...blob, x:blend('x'), y:blend('y'), angle, energy:Math.max(0,blend('energy')),
       credits, preyCredits, state, alive: state !== 6, home: state === 5 }
   })
-  return { day: track.day, time, duration: track.duration, blobs,
+  return { day: track.day, time, duration: track.duration, stepSeconds, blobs,
     plants: track.plants.filter(p => (eaten.get(p.id) ?? Infinity) > time), events: track.events }
 }

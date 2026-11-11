@@ -12,7 +12,7 @@ const chapters=[
   ['Follow a creature','Select a blob to see its eyes, thought bubble, and individual trait flower.'],
   ['Sight','The Eye layer shows the distance at which a creature can sense plants and other creatures.'],
   ['Speed','The Runner layer maps slow bodies to brown and faster ones to red. Faster strides use more energy.'],
-  ['Energy','Movement burns energy. The product rule uses size cubed times speed squared times sense, scaled by 20,000.'],
+  ['Energy','By default, each move costs energy equal to size cubed times movement speed squared, plus sight range, divided by 10,000. Movement speed is measured in units per 0.1-second step.'],
   ['Getting home','One food credit and a safe return to the edge earns survival. Two credits can earn one offspring.'],
   ['Inheritance','A newborn samples each enabled trait from a normal distribution centered on its parent.'],
   ['Read a flower','A flower combines the day’s mean traits and its closing population.'],

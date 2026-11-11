@@ -1,11 +1,17 @@
 export const FIELD = 500
 export const DT = 0.05
+export const WALKTHROUGH_STEP = 0.1
 export const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 export const radius = size => size <= 100 ? 0.25 * size : 25 + 25 * (size - 100) / size
 export const travel = (blob, config) => 10 * blob.speed * (config.stride === 'linked' ? blob.size / 10 : 1)
-export const cost = (blob, config) => config.metabolism === 'product' ?
-  blob.size ** 3 * blob.speed ** 2 * blob.sense / 20000 :
-  0.001 * (blob.size ** 3 * (travel(blob, config) / 10) ** 2 + blob.sense)
+export const walkthroughStepCost = (blob, config) =>
+  (blob.size ** 3 * (travel(blob, config) * WALKTHROUGH_STEP) ** 2 + blob.sense) / 10000
+
+export function cost(blob, config) {
+  if (config.metabolism === 'walkthrough') return walkthroughStepCost(blob, config) / WALKTHROUGH_STEP
+  if (config.metabolism === 'product') return blob.size ** 3 * blob.speed ** 2 * blob.sense / 20000
+  return 0.001 * (blob.size ** 3 * (travel(blob, config) / 10) ** 2 + blob.sense)
+}
 export const canHunt = (hunter, prey, config) => config.predation && hunter.id !== prey.id &&
   hunter.size >= 1.2 * prey.size && (config.sameSpecies || hunter.species !== prey.species)
 
@@ -27,8 +33,8 @@ export function homePoints(blob) {
   }).sort((a, b) => a.distance - b.distance)
 }
 
-export function pathOf(blob, direction, speed) {
-  const dx = Math.cos(direction) * speed * DT, dy = Math.sin(direction) * speed * DT
+export function pathOf(blob, direction, speed, stepSeconds) {
+  const dx = Math.cos(direction) * speed * stepSeconds, dy = Math.sin(direction) * speed * stepSeconds
   const tx = dx > 0 ? (FIELD - blob.r - blob.x) / dx : dx < 0 ? (blob.r - blob.x) / dx : 1
   const ty = dy > 0 ? (FIELD - blob.r - blob.y) / dy : dy < 0 ? (blob.r - blob.y) / dy : 1
   const stop = clamp(Math.min(tx, ty), 0, 1)

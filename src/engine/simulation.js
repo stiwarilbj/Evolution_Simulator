@@ -1,7 +1,8 @@
 import { plantsForDay, TRAITS } from './config.js'
 import { random, normal, shuffle } from './random.js'
 import { summaries } from './stats.js'
-import { FIELD, DT, Grid, clamp, radius, travel, cost, canHunt, turn, homePoints, pathOf, contact } from './geometry.js'
+import { FIELD, DT, WALKTHROUGH_STEP, Grid, clamp, radius, travel, cost, walkthroughStepCost,
+  canHunt, turn, homePoints, pathOf, contact } from './geometry.js'
 
 export const STATES = ['Searching', 'Foraging', 'Chasing', 'Fleeing', 'Returning', 'Home', 'Dead', 'Born']
 
@@ -15,6 +16,8 @@ export function founders(config) {
 
 export function dawn(config, day, checkpoint) {
   const { roster, nextId } = checkpoint
+  const walkthrough = config.metabolism === 'walkthrough'
+  const stepSeconds = walkthrough ? WALKTHROUGH_STEP : DT
   const species = new Map(config.species.map(s => [s.id, s]))
   const edges = shuffle([0, 1, 2, 3], config.seed, day, 2)
   const blobs = shuffle(roster, config.seed, day, 1).map((original, i) => {
@@ -27,15 +30,18 @@ export function dawn(config, day, checkpoint) {
       [along, inset, Math.PI / 2], [along, FIELD - inset, -Math.PI / 2]][edge]
     const angle = inward + (random(config.seed, 4, day, original.id) - 0.5) * Math.PI / 6
     const energy = species.get(original.species).energy
+    const moveCost = walkthrough ? walkthroughStepCost(original, config) : null
     return { ...original, r, x, y, angle, energy, capacity: energy, credits: 0, preyCredits: 0,
       state: 0, alive: true, home: false, returning: false, target: null,
-      velocityX: 0, velocityY: 0, rate: cost(original, config), speedWorld: travel(original, config) }
+      velocityX: 0, velocityY: 0, rate: walkthrough ? moveCost / stepSeconds : cost(original, config),
+      speedWorld: travel(original, config), moveCost }
   })
   blobs.sort((a, b) => a.id - b.id)
   const plants = Array.from({ length: plantsForDay(config, day) }, (_, id) => ({
     id, x: 12 + 476 * random(config.seed, 5, day, id, 0), y: 12 + 476 * random(config.seed, 5, day, id, 1), eaten: false,
   }))
-  return { day, tick: 0, limit: config.duration * 2, nextId, opening: roster, blobs, plants, events: [], settled: false }
+  return { day, tick: 0, stepSeconds, limit: Math.round(config.duration / 10 / stepSeconds),
+    nextId, opening: roster, blobs, plants, events: [], settled: false }
 }
 
 function record(ctx, blob, time, type, extra = {}) {
@@ -64,7 +70,7 @@ function nearest(blob, candidates, eligible) {
 function intent(blob, ctx, config, plantGrid, blobGrid) {
   const nearby = [...blobGrid.near(blob.x, blob.y, blob.sense)]
   const threat = nearest(blob, nearby, other => canHunt(other, blob, config) && other.credits < 2)
-  const left = Math.min((ctx.limit - ctx.tick) * DT, blob.energy / blob.rate)
+  const left = Math.min((ctx.limit - ctx.tick) * (ctx.stepSeconds ?? DT), blob.energy / blob.rate)
   const homes = homePoints(blob)
   const base = homes[0]
   const towards = target => Math.atan2(target.y - blob.y, target.x - blob.x)
@@ -128,6 +134,8 @@ function refugeContact(blob, path) {
 }
 
 function tick(ctx, config) {
+  const seconds = ctx.stepSeconds ?? DT
+  const discreteCost = config.metabolism === 'walkthrough'
   const active = ctx.blobs.filter(b => b.alive && !b.home)
   if (!active.length) {
     ctx.tick++
@@ -140,10 +148,28 @@ function tick(ctx, config) {
   // All intent queries read positions and velocities from the opening tick.
   for (const blob of active) {
     const wanted = intent(blob, ctx, config, plantGrid, blobGrid)
-    blob.angle += clamp(turn(blob.angle, wanted), -2 * Math.PI * DT, 2 * Math.PI * DT)
-    const path = { ...pathOf(blob, blob.angle, blob.speedWorld), spent: 0, blob }
+    blob.angle += clamp(turn(blob.angle, wanted), -2 * Math.PI * seconds, 2 * Math.PI * seconds)
+    const path = { ...pathOf(blob, blob.angle, blob.speedWorld, seconds), spent: 0, blob }
     paths.set(blob.id, path)
     pathGrid.insert(path, path.x, path.y, path.x + path.dx, path.y + path.dy)
+  }
+
+  const move = (path, t) => {
+    const b = path.blob
+    b.x = path.x + path.dx * t
+    b.y = path.y + path.dy * t
+  }
+  // The walkthrough pays for the entire move before a blob can collect food or hunt.
+  if (discreteCost) {
+    for (const path of paths.values()) {
+      const b = path.blob
+      if (b.energy > 0 && b.returning && refugeContact(b, path) === 0) continue
+      const moved = b.energy > 0
+      b.energy = Math.max(0, b.energy - b.moveCost)
+      if (b.energy > 0) continue
+      if (moved) move(path, 1)
+      kill(ctx, b, (ctx.tick + Number(moved)) * seconds, 'Energy depletion')
+    }
   }
 
   const candidates = []
@@ -153,6 +179,7 @@ function tick(ctx, config) {
   }
   for (const path of paths.values()) {
     const b = path.blob
+    if (!b.alive) continue
     if (b.returning) push(refugeContact(b, path), 0, path)
     if (b.credits >= 2) continue
     const endX = path.x + path.dx, endY = path.y + path.dy
@@ -166,20 +193,19 @@ function tick(ctx, config) {
   }
   candidates.sort((a, b) => a.t - b.t || Number(a.kind !== 0) - Number(b.kind !== 0) || a.tie - b.tie ||
     a.path.blob.id - b.path.blob.id || a.kind - b.kind)
-  const move = (path, t) => {
-    const b = path.blob
-    b.x = path.x + path.dx * t
-    b.y = path.y + path.dy * t
-  }
   const charge = (path, t) => {
     const b = path.blob
     if (!b.alive || b.home) return false
-    const debit = b.rate * DT * (t - path.spent)
+    if (discreteCost) {
+      move(path, t)
+      return true
+    }
+    const debit = b.rate * seconds * (t - path.spent)
     if (b.energy <= debit) {
-      const fraction = path.spent + b.energy / (b.rate * DT)
+      const fraction = path.spent + b.energy / (b.rate * seconds)
       move(path, fraction)
       b.energy = 0
-      kill(ctx, b, (ctx.tick + fraction) * DT, 'Energy depletion')
+      kill(ctx, b, (ctx.tick + fraction) * seconds, 'Energy depletion')
       return false
     }
     b.energy -= debit
@@ -190,7 +216,7 @@ function tick(ctx, config) {
   for (const { t, kind, path, target } of candidates) {
     const b = path.blob
     if ((kind !== 0 && b.credits >= 2) || !charge(path, t)) continue
-    const time = (ctx.tick + t) * DT
+    const time = (ctx.tick + t) * seconds
     if (kind === 0) {
       b.home = true
       b.state = 5
@@ -214,8 +240,8 @@ function tick(ctx, config) {
   for (const path of paths.values()) {
     charge(path, 1)
     const b = path.blob
-    b.velocityX = b.home ? 0 : path.dx / DT
-    b.velocityY = b.home ? 0 : path.dy / DT
+    b.velocityX = b.home ? 0 : path.dx / seconds
+    b.velocityY = b.home ? 0 : path.dy / seconds
   }
   ctx.tick++
 }
@@ -235,7 +261,7 @@ export function step(ctx, config, count = 1, skipIdle = false) {
 export function dusk(ctx, config) {
   if (ctx.settled) return ctx.settled
   const closing = []
-  const time = ctx.limit * DT
+  const time = ctx.limit * (ctx.stepSeconds ?? DT)
   const species = new Map(config.species.map(s => [s.id, s]))
   for (const b of ctx.blobs) {
     if (!b.alive) continue
@@ -267,6 +293,7 @@ export function dusk(ctx, config) {
 }
 
 export function snapshot(ctx) {
-  return { day: ctx.day, time: ctx.tick * DT, duration: ctx.limit * DT,
+  const stepSeconds = ctx.stepSeconds ?? DT
+  return { day: ctx.day, time: ctx.tick * stepSeconds, duration: ctx.limit * stepSeconds, stepSeconds,
     blobs: [...ctx.blobs, ...(ctx.newborns ?? [])], plants: ctx.plants.filter(p => !p.eaten), events: ctx.events }
 }

@@ -857,7 +857,7 @@ test('Trends compares sight spread in the filtered days and opens each closing c
 
   const world = page.locator('main.world')
   const clock = page.getByRole('slider', { name: 'Replay time' })
-  for (const [day, label, count, spread] of [[2, 'Narrowest', 180, '0.50'], [3, 'Widest', 261, '0.59']]) {
+  for (const [day, label, count, spread] of [[2, 'Narrowest', 190, '0.54'], [3, 'Widest', 281, '0.67']]) {
     const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name: label + ' spread · Day ' + day }) })
     await expect(card.getByText(String(count), { exact: true })).toBeVisible()
     await expect(card.getByText(spread, { exact: true })).toBeVisible()
@@ -907,18 +907,18 @@ test('Trait Space shows exact ages and newborn shares for both days and the sele
   const table = page.getByRole('table', { name: 'Living blobs by age' })
   await expect(table.getByRole('columnheader')).toHaveText(['Age (days)', 'Day 3', 'Day 2'])
   const cells = label => table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: label, exact: true }) }).getByRole('cell')
-  await expect(cells('0')).toHaveText(['116', '86'])
+  await expect(cells('0')).toHaveText(['129', '92'])
   await expect(cells('3')).toHaveText(['41', '0'])
-  await expect(cells('Living blobs')).toHaveText(['261', '180'])
-  await expect(cells('Newborn share')).toHaveText(['44.4%', '47.8%'])
+  await expect(cells('Living blobs')).toHaveText(['281', '190'])
+  await expect(cells('Newborn share')).toHaveText(['45.9%', '48.4%'])
   await expect(page.getByRole('spinbutton', { name: 'Bins' })).toHaveCount(0)
   await page.getByRole('checkbox', { name: 'Percentage' }).check()
-  await expect(cells('0')).toHaveText(['44.4%', '47.8%'])
+  await expect(cells('0')).toHaveText(['45.9%', '48.4%'])
   await page.getByLabel('Filter By Species').selectOption('orange')
-  await expect(cells('Living blobs')).toHaveText(['68', '40'])
+  await expect(cells('Living blobs')).toHaveText(['71', '39'])
   await compare.fill('0')
   await compare.press('Tab')
-  await expect(cells('Living blobs')).toHaveText(['68'])
+  await expect(cells('Living blobs')).toHaveText(['71'])
 })
 
 test('Trait Space keeps selections within the species filter and only loads whole days', async ({ page }) => {
@@ -1353,7 +1353,7 @@ test('creature details show refuge distance while a replayed blob is returning',
   const distance = details.getByText(/^\d[\d,.]* units from the nearest refuge$/)
   await expect(distance).toHaveCount(0)
 
-  // In the starter setup, founder #1 returns to its refuge from about 0.75 to 1.45 s.
+  // In the starter setup, founder #1 heads home by 1 s and reaches the edge before 2 s.
   await time.fill('1')
   await expect(details.getByText('Returning', { exact: true })).toBeVisible()
   await expect(distance).toBeVisible()
@@ -1369,6 +1369,8 @@ test('creature details use the movement and energy rules for the day being watch
     for (const [name, value] of [['Food', '400'], ['Size', '12'], ['Sense Range', '30'], ['Energy', '1000']]) {
       await page.getByRole('spinbutton', { name, exact: true }).fill(value)
     }
+    await page.getByRole('button', { name: /^Advanced Rules/ }).click()
+    await page.getByRole('combobox', { name: /^Energy model/ }).selectOption('product')
   })
   await quickThrough(page, 1)
   await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
@@ -1450,6 +1452,9 @@ test('playback actions disable advancing at dusk and work again on the next day'
   await openSimulator(page)
   await startRun(page, '10', async () => {
     await page.getByRole('spinbutton', { name: 'Seconds per day', exact: true }).fill('1')
+    await page.getByRole('button', { name: /^Advanced Rules/ }).click()
+    await expect(page.getByRole('combobox', { name: /^Energy model/ })).toHaveValue('walkthrough')
+    await expect(page.getByText('10.002 energy per 0.1 s step for Blue')).toBeVisible()
   })
   const actions = page.getByRole('button', { name: 'Playback actions' })
   const finish = page.getByRole('button', { name: 'Finish Day', exact: true })
@@ -1459,10 +1464,15 @@ test('playback actions disable advancing at dusk and work again on the next day'
   const through = page.getByRole('button', { name: 'Play through generations' })
   await expect(through).toHaveAttribute('aria-pressed', 'true')
   await through.click()
+  await page.getByRole('button', { name: 'Follow creature' }).click()
+  await page.getByRole('button', { name: /CURRENT CREATURE.*#1$/ }).click()
+  const details = page.getByRole('complementary', { name: 'Creature details' })
+  await expect(details.getByText('10.002 per step')).toBeVisible()
 
   await actions.click()
   await step.click()
-  await expect(elapsed).toHaveAttribute('aria-valuenow', '0.05')
+  await expect(elapsed).toHaveAttribute('aria-valuenow', '0.1')
+  await expect(details.getByText('490.0 / 500 energy')).toBeVisible()
   await page.getByRole('button', { name: 'Play', exact: true }).click()
   await expect(elapsed).toHaveAttribute('aria-valuenow', '1')
   await actions.click()
@@ -1482,7 +1492,7 @@ test('playback actions disable advancing at dusk and work again on the next day'
   await expect(step).toBeDisabled()
   await replay.fill('0.5')
   await step.click()
-  await expect(replay).toHaveValue('0.55')
+  await expect(replay).toHaveValue('0.6')
   await actions.click()
   await end.click()
   await expect(replay).toHaveValue('1')

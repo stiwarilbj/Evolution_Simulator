@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { BatteryMedium, CircleX, Copy, Dices, Leaf, Plus, Check, Trash2 } from 'lucide-vue-next'
 import { useLab } from '../store.js'
 import { PALETTE, TRAITS, randomSeed, speciesTemplate, validate } from '../engine/config.js'
-import { travel, cost } from '../engine/geometry.js'
+import { travel, cost, walkthroughStepCost } from '../engine/geometry.js'
 import NumberField from './NumberField.vue'
 
 const lab = useLab()
@@ -215,9 +215,15 @@ onMounted(()=>dialog.value.showModal())
             <label><input v-model="draft.predation" type="checkbox"> Predation</label>
             <label><input v-model="draft.sameSpecies" type="checkbox" :disabled="!draft.predation"> Same-species hunting</label>
             <label>Stride <select v-model="draft.stride"><option value="linked">Size-linked</option><option value="speed">Speed only</option></select></label>
-            <label>Energy model <select v-model="draft.metabolism"><option value="product">Product</option><option value="additive">Walkthrough additive</option></select></label>
+            <label>Energy model <select v-model="draft.metabolism">
+              <option value="walkthrough">Video walkthrough</option><option value="product">Product</option><option value="additive">Earlier additive</option>
+            </select></label>
             <label>Mutation profile <select v-model="mutationProfile"><option value="" disabled>Custom</option><option value="all">All unlocked</option><option value="speed">Speed only</option><option value="locked">All locked</option></select></label>
-            <output>{{ draft.metabolism==='product' ? 'size³ × speed² × sense ÷ 20,000' : '0.001 × (size³ × effective speed² + sense)' }}<small>{{ cost(selected,draft).toFixed(1) }} energy/s for {{ selected.name }}</small></output>
+            <output v-if="draft.metabolism==='walkthrough'">
+              (size³ × (distance per step)² + sight range) ÷ 10,000
+              <small>{{ walkthroughStepCost(selected,draft).toFixed(3) }} energy per 0.1 s step for {{ selected.name }}</small>
+            </output>
+            <output v-else>{{ draft.metabolism==='product' ? 'size³ × speed² × sense ÷ 20,000' : '0.001 × (size³ × effective speed² + sense)' }}<small>{{ cost(selected,draft).toFixed(1) }} energy/s for {{ selected.name }}</small></output>
           </div>
         </div>
       </section>
