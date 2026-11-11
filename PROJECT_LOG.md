@@ -35,3 +35,4 @@
 
 - Fixed Seconds per day so Settings reports values outside 1–60 seconds and requires steps of one tenth of a second.
 - Updated the README link and browser test path for the renamed GitHub Pages site.
+- Fixed Run Library so View results opens Trends for the active run without stopping Quick Sim.

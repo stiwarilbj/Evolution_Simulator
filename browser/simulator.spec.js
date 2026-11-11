@@ -720,10 +720,10 @@ test('resuming a run keeps completed days while saves are pending', async ({ pag
   await expect(dayTile(page, 4)).toBeVisible()
 })
 
-test('switching runs saves the day Quick Sim was working on', async ({ page }) => {
+async function installBatchHold(page) {
   await page.addInitScript(() => {
     const NativeWorker = window.Worker
-    const batch = window.switchTest = { hold: false, release: null, stopping: false }
+    const batch = window.batchTest = { hold: false, release: null, stopping: false }
     window.Worker = class extends NativeWorker {
       postMessage(data) {
         if (data.type === 'batch' && batch.hold) {
@@ -743,6 +743,10 @@ test('switching runs saves the day Quick Sim was working on', async ({ page }) =
       }
     }
   })
+}
+
+test('switching runs saves the day Quick Sim was working on', async ({ page }) => {
+  await installBatchHold(page)
   await openSimulator(page)
   await startRun(page, '10', () => page.getByLabel('Run name').fill('Other run'))
   await startRun(page)
@@ -750,7 +754,7 @@ test('switching runs saves the day Quick Sim was working on', async ({ page }) =
   const library = page.getByRole('dialog', { name: 'Run Library' })
   const original = library.locator('article').filter({ hasText: 'Browser test run' })
   const other = library.locator('article').filter({ hasText: 'Other run' })
-  await page.evaluate(() => { window.switchTest.hold = true })
+  await page.evaluate(() => { window.batchTest.hold = true })
   await quickThrough(page, 5)
   await page.getByRole('button', { name: 'Hide progress', exact: true }).click()
 
@@ -758,8 +762,8 @@ test('switching runs saves the day Quick Sim was working on', async ({ page }) =
   await other.getByRole('button', { name: 'Resume', exact: true }).click()
   await expect(runOptions).toHaveText('Day 1 / 10 · Stopping batch')
   await expect(runOptions).toHaveAttribute('title', 'Browser test run')
-  expect(await page.evaluate(() => window.switchTest.stopping)).toBe(true)
-  await page.evaluate(() => window.switchTest.release())
+  expect(await page.evaluate(() => window.batchTest.stopping)).toBe(true)
+  await page.evaluate(() => window.batchTest.release())
   await expect(runOptions).toHaveAttribute('title', 'Other run')
 
   await openRunLibrary(page)
@@ -771,6 +775,31 @@ test('switching runs saves the day Quick Sim was working on', async ({ page }) =
   await page.reload()
   await expect(runOptions).toHaveText('Day 2 / 10 · Ready')
   await expect(dayTile(page, 1)).toBeVisible()
+})
+
+test('viewing the active run results keeps Quick Sim running', async ({ page }) => {
+  await installBatchHold(page)
+  await openSimulator(page)
+  await startRun(page)
+  const library = page.getByRole('dialog', { name: 'Run Library' })
+  const active = library.locator('article').filter({ hasText: 'Browser test run' })
+  await page.evaluate(() => { window.batchTest.hold = true })
+  await quickThrough(page, 5)
+  await page.getByRole('button', { name: 'Hide progress', exact: true }).click()
+
+  await openRunLibrary(page)
+  await active.getByText('Actions', { exact: true }).click()
+  await active.getByRole('button', { name: 'View results' }).click()
+  await expect(page).toHaveURL(/\/stats$/)
+  await expect(page.getByText(/Browser test run .* Through Day 0 · Simulating/)).toBeVisible()
+  expect(await page.evaluate(() => window.batchTest.stopping)).toBe(false)
+
+  await page.getByRole('button', { name: 'Progress', exact: true }).click()
+  await page.evaluate(() => window.batchTest.release())
+  await expect(page.getByRole('heading', { name: 'Simulation complete' })).toBeVisible()
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 5')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await expect(page.getByText(/Browser test run .* Through Day 5/)).toBeVisible()
 })
 
 test('a copied setup link keeps the shared settings after reload', async ({ page, context, browser }) => {

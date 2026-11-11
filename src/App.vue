@@ -186,6 +186,11 @@ function task(key) {
   lab.modal=key
 }
 async function openRun(value, view) {
+  if (view === 'stats' && value.id === lab.run.id) {
+    lab.modal = null
+    go(view)
+    return
+  }
   const token = beginNavigation()
   const current = () => token === routeRequest
   navigating = true
