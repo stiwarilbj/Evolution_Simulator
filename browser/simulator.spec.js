@@ -189,6 +189,33 @@ test('World fits split windows and keeps its controls in full screen', async ({ 
   expect(await page.evaluate(() => window.scrollY)).toBe(0)
 })
 
+test('World restores layers for every creature after clearing a selection', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page)
+  const layers = page.getByRole('button', { name: 'Layers', exact: true })
+  const moreLayers = page.getByRole('button', { name: 'More layer options' })
+  const sense = page.getByRole('button', { name: 'Sense range', exact: true })
+  const selectedOnly = page.getByRole('checkbox', { name: 'Selected creature only' })
+
+  await page.getByRole('button', { name: 'Follow creature' }).click()
+  await layers.click()
+  await sense.click()
+  await moreLayers.click()
+  await selectedOnly.check()
+
+  await page.getByRole('button', { name: 'View options' }).click()
+  await page.getByRole('button', { name: 'Creatures', exact: true }).click()
+  const details = page.getByRole('complementary', { name: 'Creature details' })
+  await details.getByRole('combobox', { name: 'Creature', exact: true }).selectOption('')
+  await details.getByRole('button', { name: 'Close creature details' }).click()
+
+  await layers.click()
+  await expect(sense).toHaveAttribute('aria-pressed', 'true')
+  await moreLayers.click()
+  await expect(selectedOnly).toBeDisabled()
+  await expect(selectedOnly).not.toBeChecked()
+})
+
 test('World continues drawing live playback after losing WebGL', async ({ page }) => {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))

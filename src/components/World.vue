@@ -113,6 +113,9 @@ function eventName(e) {
   return e.id===lab.selected ? 'Born to #'+e.parent : 'Offspring #'+e.id
 }
 watch(() => lab.run.id, () => { details.value=false; tool.value=null; fit() })
+watch(() => visible.value?.id, id => {
+  if (id == null) layers.value.selected = false
+})
 watch(() => visible.value?.alive, alive => { if (alive===false) lab.following=false })
 defineExpose({ select, overhead:()=>{ lab.following=false; camera.value='overhead'; layers.value.sense=true } })
 </script>
@@ -146,7 +149,7 @@ defineExpose({ select, overhead:()=>{ lab.following=false; camera.value='overhea
         </template>
         <template v-else>
           <button @click="tool='layers'">Back to layers</button>
-          <label><input v-model="layers.selected" type="checkbox" :disabled="lab.selected==null"> Selected creature only</label>
+          <label><input v-model="layers.selected" type="checkbox" :disabled="!visible"> Selected creature only</label>
           <label><input v-model="layers.homes" type="checkbox"> Show refuges</label>
         </template>
       </div>
