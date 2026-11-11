@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { BatteryMedium, CircleX, Copy, Dices, Leaf, Plus, Check, Trash2 } from 'lucide-vue-next'
 import { useLab } from '../store.js'
-import { PALETTE, TRAITS, randomSeed, speciesTemplate, validate } from '../engine/config.js'
+import { LEGACY_RULE_VERSION, PALETTE, TRAITS, randomSeed, speciesTemplate, validate } from '../engine/config.js'
 import { travel, cost, walkthroughStepCost } from '../engine/geometry.js'
 import NumberField from './NumberField.vue'
 
@@ -214,6 +214,9 @@ onMounted(()=>dialog.value.showModal())
           <div v-if="advanced" class="advanced-grid">
             <label><input v-model="draft.predation" type="checkbox"> Predation</label>
             <label><input v-model="draft.sameSpecies" type="checkbox" :disabled="!draft.predation"> Same-species hunting</label>
+            <small v-if="draft.predation" class="quiet predation-note">
+              A hunter must be at least {{ draft.version === LEGACY_RULE_VERSION ? '20%' : '25%' }} larger than its prey.
+            </small>
             <label>Stride <select v-model="draft.stride"><option value="linked">Size-linked</option><option value="speed">Speed only</option></select></label>
             <label>Energy model <select v-model="draft.metabolism">
               <option value="walkthrough">Video walkthrough</option><option value="product">Product</option><option value="additive">Earlier additive</option>

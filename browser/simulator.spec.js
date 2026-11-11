@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
+import { LEGACY_RULE_VERSION, starter } from '../src/engine/config.js'
 
 async function openSimulator(page) {
   await page.addInitScript(() => localStorage.setItem('evolution.tour', '1'))
@@ -136,6 +137,8 @@ test('the production build runs a new experiment and shows its charts @pages', a
     await page.getByRole('button', { name: /^Refill rewards/ }).click()
     await expect(page.getByRole('spinbutton', { name: 'Plant reward' })).toHaveValue('0')
     await expect(page.getByRole('spinbutton', { name: 'Prey reward' })).toHaveValue('0')
+    await page.getByRole('button', { name: /^Advanced Rules/ }).click()
+    await expect(page.getByText('A hunter must be at least 25% larger than its prey.')).toBeVisible()
   })
   await quickThrough(page, 3)
   await expect(page.getByRole('heading', { name: 'Simulation complete' })).toBeVisible()
@@ -861,7 +864,7 @@ test('Trends compares sight spread in the filtered days and opens each closing c
 
   const world = page.locator('main.world')
   const clock = page.getByRole('slider', { name: 'Replay time' })
-  for (const [day, label, count, spread] of [[2, 'Narrowest', 188, '0.50'], [3, 'Widest', 269, '0.62']]) {
+  for (const [day, label, count, spread] of [[2, 'Narrowest', 188, '0.50'], [3, 'Widest', 274, '0.63']]) {
     const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name: label + ' spread · Day ' + day }) })
     await expect(card.getByText(String(count), { exact: true })).toBeVisible()
     await expect(card.getByText(spread, { exact: true })).toBeVisible()
@@ -911,13 +914,13 @@ test('Trait Space shows exact ages and newborn shares for both days and the sele
   const table = page.getByRole('table', { name: 'Living blobs by age' })
   await expect(table.getByRole('columnheader')).toHaveText(['Age (days)', 'Day 3', 'Day 2'])
   const cells = label => table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: label, exact: true }) }).getByRole('cell')
-  await expect(cells('0')).toHaveText(['120', '91'])
-  await expect(cells('3')).toHaveText(['36', '0'])
-  await expect(cells('Living blobs')).toHaveText(['269', '188'])
-  await expect(cells('Newborn share')).toHaveText(['44.6%', '48.4%'])
+  await expect(cells('0')).toHaveText(['124', '91'])
+  await expect(cells('3')).toHaveText(['37', '0'])
+  await expect(cells('Living blobs')).toHaveText(['274', '188'])
+  await expect(cells('Newborn share')).toHaveText(['45.3%', '48.4%'])
   await expect(page.getByRole('spinbutton', { name: 'Bins' })).toHaveCount(0)
   await page.getByRole('checkbox', { name: 'Percentage' }).check()
-  await expect(cells('0')).toHaveText(['44.6%', '48.4%'])
+  await expect(cells('0')).toHaveText(['45.3%', '48.4%'])
   await page.getByLabel('Filter By Species').selectOption('orange')
   await expect(cells('Living blobs')).toHaveText(['77', '39'])
   await compare.fill('0')
@@ -1339,6 +1342,46 @@ test('Watch creature follows a newborn at dusk or at the next recorded dawn', as
   await expect(runOptions).toHaveText('Day 2 / 10 · Replay')
   await expect(replayTime).toHaveValue('0')
   await expect(current).toBeVisible()
+})
+
+test('a replay applies the predation threshold saved with its setup', async ({ page }) => {
+  await openSimulator(page)
+  const setup = { ...starter(), days: 10, mode: 'live', sameSpecies: false }
+  Object.assign(setup.species[0], { energy: 1000, sense: 60 })
+  Object.assign(setup.species[1], { enabled: true, count: 30, size: 12, energy: 1000, sense: 60 })
+
+  for (const [version, threshold] of [[setup.version, 25], [LEGACY_RULE_VERSION, 20]]) {
+    await openRunLibrary(page)
+    await page.getByRole('dialog', { name: 'Run Library' }).locator('input[type=file]').setInputFiles({
+      name: 'predation.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify({ ...setup, version })),
+    })
+    await page.getByRole('button', { name: /^Advanced Rules/ }).click()
+    await expect(page.getByText(`A hunter must be at least ${threshold}% larger than its prey.`)).toBeVisible()
+    await page.getByRole('button', { name: 'Evolve!' }).click()
+    await expect(page.getByRole('button', { name: 'Run options' })).toHaveText('Day 1 / 10 · Ready')
+
+    await quickThrough(page, 1)
+    await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
+    await page.getByRole('button', { name: 'Watch last day' }).click()
+    await expect(page.getByRole('button', { name: 'Run options' })).toHaveText('Day 1 / 10 · Replay')
+    await page.reload()
+
+    const time = page.getByRole('slider', { name: 'Replay time' })
+    await time.fill('0')
+    await page.getByRole('button', { name: 'View options' }).click()
+    await page.getByRole('button', { name: 'Creatures', exact: true }).click()
+    const details = page.getByRole('complementary', { name: 'Creature details' })
+    await details.getByRole('combobox', { name: 'Creature', exact: true }).selectOption('51')
+    await details.getByRole('combobox', { name: 'Filter creature events' }).selectOption('prey')
+    await time.fill('0.2')
+    if (version === LEGACY_RULE_VERSION) {
+      await expect(details.getByRole('button', { name: /Hunted #7$/ })).toBeVisible()
+    } else {
+      await expect(details.getByText('No matching events at this point in the day.')).toBeVisible()
+    }
+  }
 })
 
 test('replay shows food credits without refills and refuge distance while returning', async ({ page }) => {

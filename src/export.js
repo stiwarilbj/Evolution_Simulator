@@ -32,10 +32,11 @@ export function csv(run, scope='all', start=1, end=1000) {
   const headers=['run','seed','rule_version','day','scope','rule_start_day','fork_day',...base,...causes,...traits.flatMap(m=>fields.map(f=>m.key+'_'+f))]
   const out=[headers]
   for(const day of run.summaries.filter(s=>s.day>=start&&s.day<=end)) {
+    const revision=run.revisions?.findLast(r=>r.day<=day.day)
+    const rules=revision?.setup ?? run.setup
     for(const [id,row] of Object.entries(day.rows)) {
       if(scope!=='*'&&scope!==id) continue
-      const revision=run.revisions?.findLast(r=>r.day<=day.day)
-      out.push([run.id,run.setup.seed,run.setup.version,day.day,id,revision?.day ?? 1,run.forkDay,...base.map(k=>row[k]),...causes.map(c=>row.causes[c]),
+      out.push([run.id,rules.seed,rules.version,day.day,id,revision?.day ?? 1,run.forkDay,...base.map(k=>row[k]),...causes.map(c=>row.causes[c]),
         ...traits.flatMap(m=>fields.map(f=>row[m.key]?.[f]))])
     }
   }

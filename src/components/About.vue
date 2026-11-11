@@ -13,6 +13,7 @@ const chapters=[
   ['Sight','The Eye layer shows the distance at which a creature can sense plants and other creatures.'],
   ['Speed','The Runner layer maps slow bodies to brown and faster ones to red. Faster strides use more energy.'],
   ['Energy','By default, each move costs energy equal to size cubed times movement speed squared, plus sight range, divided by 10,000. Movement speed is measured in units per 0.1-second step.'],
+  ['Predation','In new setups, prey can be at most 80% of the hunter’s size. A blob of size 12.5 can eat a blob of size 10.'],
   ['Getting home','A plant or prey gives one food credit. By default, energy refills at dawn. Return to the edge with one credit to survive or two to have one offspring.'],
   ['Inheritance','A newborn samples each enabled trait from a normal distribution centered on its parent.'],
   ['Read a flower','A flower combines the day’s mean traits and its closing population.'],

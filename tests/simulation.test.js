@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { starter, plantsForDay, rulesFor, validate, validateRevisions } from '../src/engine/config.js'
+import { LEGACY_RULE_VERSION, starter, plantsForDay, rulesFor, validate, validateRevisions } from '../src/engine/config.js'
 import { canHunt, cost, radius, walkthroughStepCost } from '../src/engine/geometry.js'
 import { normal } from '../src/engine/random.js'
 import { dawn, dusk, founders, snapshot, step } from '../src/engine/simulation.js'
@@ -55,23 +55,31 @@ test('dawn balances all four edges, resets credits and capacity, and keys food b
 test('the hunt threshold is inclusive, same-species configurable, and hunting counts as food', () => {
   const defaults = starter()
   assert.equal(defaults.preyReward, 0)
-  for (const config of [defaults, { ...defaults, preyReward: 30 }]) {
+  for (const [config, size, eligible] of [
+    [defaults, 12, false],
+    [defaults, 12.499, false],
+    [defaults, 12.5, true],
+    [{ ...defaults, preyReward: 30 }, 12.5, true],
+    [{ ...defaults, version: LEGACY_RULE_VERSION }, 12, true],
+  ]) {
     const field = dawn(config, 1, founders(config))
     const [hunter, prey] = field.blobs
     field.blobs = [hunter, prey]
     field.plants = []
-    Object.assign(hunter, { x: 100, y: 100, size: 12, energy: 400 })
+    Object.assign(hunter, { x: 100, y: 100, size, r: radius(size), energy: 400 })
     Object.assign(prey, { x: 100, y: 100, size: 10 })
-    assert.equal(canHunt(hunter, prey, config), true)
-    assert.equal(canHunt({ ...hunter, size: 11.999 }, prey, config), false)
+    assert.equal(canHunt(hunter, prey, config), eligible)
     assert.equal(canHunt(hunter, prey, { ...config, sameSpecies: false }), false)
+    assert.equal(canHunt(hunter, { ...prey, species: 'orange' }, { ...config, sameSpecies: false }), eligible)
+    assert.equal(canHunt(hunter, prey, { ...config, predation: false }), false)
     step(field, config)
-    assert.equal(prey.alive, false)
-    assert.equal(hunter.credits, 1)
-    assert.equal(hunter.preyCredits, 1)
+    assert.equal(prey.alive, !eligible)
+    assert.equal(hunter.credits, Number(eligible))
+    assert.equal(hunter.preyCredits, Number(eligible))
     const [hunt] = field.events.filter(e => e.type === 'prey')
-    assert.equal(hunt.energy, hunt.beforeEnergy + config.preyReward)
-    assert.equal(field.events.filter(e => e.cause === 'Predation').length, 1)
+    assert.equal(Boolean(hunt), eligible)
+    if (hunt) assert.equal(hunt.energy, hunt.beforeEnergy + config.preyReward)
+    assert.equal(field.events.filter(e => e.cause === 'Predation').length, Number(eligible))
   }
 })
 
@@ -231,10 +239,12 @@ test('CSV exports per-scope rows and distinguishes missing measurements from zer
 })
 
 test('branch histories keep founding traits and apply new food and duration only after the fork', () => {
-  const original = { ...starter(), metabolism:'product' }
-  const branch = { ...original, food:80, duration:200, metabolism:'walkthrough' }
+  const original = { ...starter(), version: LEGACY_RULE_VERSION, metabolism:'product' }
+  const branch = { ...original, version: starter().version, food:80, duration:200, metabolism:'walkthrough' }
   const revisions = [{ day:1, setup:original }, { day:3, setup:branch }]
+  assert.deepEqual(validate(original), {})
   assert.equal(validateRevisions(branch,revisions),true)
+  const summaries = []
   let result = { checkpoint:founders(original) }
   for (let day=1; day<=3; day++) {
     const rules = rulesFor(branch,revisions,day)
@@ -243,6 +253,9 @@ test('branch histories keep founding traits and apply new food and duration only
     assert.equal(snapshot(state).duration, day < 3 ? 10 : 20)
     result = step(state,rules,state.limit,true)
     assert.equal(result.summary.rows.all.food,day<3?50:80)
+    summaries.push(result.summary)
   }
+  const rows = csv({ id:'branch', setup:branch, revisions, summaries }, 'all').split('\r\n').slice(1)
+  assert.deepEqual(rows.map(row => row.split(',')[2]), ['"1"', '"1"', '"2"'])
   assert.equal(validateRevisions({ ...branch, seed:2 },revisions),false)
 })

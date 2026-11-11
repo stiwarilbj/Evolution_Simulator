@@ -1,3 +1,5 @@
+import { LEGACY_RULE_VERSION } from './config.js'
+
 export const FIELD = 500
 export const DT = 0.05
 export const WALKTHROUGH_STEP = 0.1
@@ -13,7 +15,8 @@ export function cost(blob, config) {
   return 0.001 * (blob.size ** 3 * (travel(blob, config) / 10) ** 2 + blob.sense)
 }
 export const canHunt = (hunter, prey, config) => config.predation && hunter.id !== prey.id &&
-  hunter.size >= 1.2 * prey.size && (config.sameSpecies || hunter.species !== prey.species)
+  (config.sameSpecies || hunter.species !== prey.species) &&
+  (config.version === LEGACY_RULE_VERSION ? hunter.size >= 1.2 * prey.size : prey.size <= 0.8 * hunter.size)
 
 export function turn(from, to) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from))

@@ -1,6 +1,7 @@
 export const TRAITS = ['speed', 'size', 'sense']
 export const PALETTE = ['#406780', '#F47E18', '#CE6591', '#80A653', '#9B7ACA', '#46A49D', '#D5A84C', '#C76052']
-export const VERSION = 1
+export const LEGACY_RULE_VERSION = 1
+export const VERSION = 2
 
 export function speciesTemplate(id, name, color, count = 10, enabled = true) {
   return { id, name, color, count, enabled, energy: 500, speed: 10, size: 10, sense: 20,
@@ -26,7 +27,9 @@ export function validate(config) {
       errors[key] = `${name} must be ${integer ? 'a whole number ' : ''}from ${min} to ${max}.`
     }
   }
-  if (!config || config.version !== VERSION) return { setup: 'Choose a setup file with a supported rule version.' }
+  if (!config || ![LEGACY_RULE_VERSION, VERSION].includes(config.version)) {
+    return { setup: 'Choose a setup file with a supported rule version.' }
+  }
   if (typeof config.name !== 'string' || !config.name.trim() || config.name.trim().length > 60) errors.name = 'Enter a run name with 1–60 characters.'
   number('days', 'Days', config.days, 10, 1000)
   number('duration', 'Seconds per day', config.duration / 10, 1, 60, false)
