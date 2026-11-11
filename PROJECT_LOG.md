@@ -43,3 +43,4 @@
 - Fixed Jump to chart so it scrolls to Overview with both separate and combined scales.
 - Added a retry in Trait Space so a failed day can load again without changing the selection.
 - Fixed playback actions that stayed enabled at the end of a live or recorded day.
+- Fixed Compare so the old boards disappear while a different day's replay loads or fails.

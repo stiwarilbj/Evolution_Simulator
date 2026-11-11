@@ -1420,7 +1420,7 @@ test('Compare keeps a cleared run selector empty when the page reloads', async (
   }
 })
 
-test('Compare can retry a failed replay for the same runs and day', async ({ page }) => {
+test('Compare hides stale boards while changing days and can retry the same day', async ({ page }) => {
   await page.addInitScript(() => {
     const NativeWorker = window.Worker
     let failOnce = true
@@ -1428,9 +1428,9 @@ test('Compare can retry a failed replay for the same runs and day', async ({ pag
       postMessage(data) {
         if (failOnce && data.type === 'replay' && data.setup.name === 'Right archive' && data.day === 2) {
           failOnce = false
-          queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', {
+          window.failComparisonReplay = () => this.dispatchEvent(new MessageEvent('message', {
             data: { type: 'error', id: data.id, message: 'Replay unavailable' },
-          })))
+          }))
           return
         }
         return super.postMessage(data)
@@ -1445,14 +1445,30 @@ test('Compare can retry a failed replay for the same runs and day', async ({ pag
     await page.getByRole('button', { name: 'Close', exact: true }).click()
   }
 
-  await page.getByRole('button', { name: 'Run options' }).click()
-  await page.getByRole('button', { name: 'Run Library' }).click()
+  await dayTile(page, 1).click()
+  await expect(page.getByRole('button', { name: 'Run options' })).toHaveText('Day 1 / 10 · Replay')
+  await openRunLibrary(page)
   const right = page.getByRole('dialog', { name: 'Run Library' }).locator('article').filter({ hasText: 'Right archive' })
   await right.getByRole('button', { name: 'Compare', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'Day 2 results' })).toBeVisible()
-  await expect(page.getByRole('status').filter({ hasText: 'Replay unavailable' })).toBeVisible()
   const play = page.getByRole('button', { name: 'Play comparison' })
   const progress = page.getByRole('slider', { name: 'Shared day progress' })
+  const boards = page.locator('.paired-boards canvas.world-canvas')
+  await expect(page.getByRole('heading', { name: 'Day 1 results' })).toBeVisible()
+  await expect(play).toBeEnabled()
+  await expect(boards).toHaveCount(2)
+  await expect(boards.first()).toBeVisible()
+  await expect(boards.last()).toBeVisible()
+
+  await page.getByRole('button', { name: 'Next comparison day' }).click()
+  await expect(page.getByRole('heading', { name: 'Day 2 results' })).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'Building paired replays' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => typeof window.failComparisonReplay)).toBe('function')
+  await expect(boards.first()).toBeHidden()
+  await expect(boards.last()).toBeHidden()
+  await page.evaluate(() => window.failComparisonReplay())
+  await expect(page.getByRole('status').filter({ hasText: 'Replay unavailable' })).toBeVisible()
+  await expect(boards.first()).toBeHidden()
+  await expect(boards.last()).toBeHidden()
   await expect(play).toBeDisabled()
   await expect(progress).toBeDisabled()
 
@@ -1460,6 +1476,8 @@ test('Compare can retry a failed replay for the same runs and day', async ({ pag
   await expect(play).toBeEnabled()
   await expect(page.getByRole('status').filter({ hasText: 'Replay unavailable' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Day 2 results' })).toBeVisible()
+  await expect(boards.first()).toBeVisible()
+  await expect(boards.last()).toBeVisible()
   await progress.fill('0.5')
   await expect(page.getByRole('region', { name: 'Left run' }).getByRole('heading')).toHaveText(/Left archive.*5\.0 s/)
   await expect(page.getByRole('region', { name: 'Right run' }).getByRole('heading')).toHaveText(/Right archive.*5\.0 s/)

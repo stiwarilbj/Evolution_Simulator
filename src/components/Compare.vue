@@ -147,7 +147,7 @@ onBeforeUnmount(()=>{ ++job; stop() })
       <div class="paired-boards" :class="{ 'reveal-boards':reveal }" :style="{ '--divider':divider+'%' }">
         <section v-for="(run,index) in runs" :key="index" :aria-label="names[index]"
           :class="[index===0 ? 'run-left' : 'run-right', { 'quiet-board':emphasis!=='both' && emphasis!==(index===0 ? 'left' : 'right') }]">
-          <Board :ref="element=>boards[index]=element" :frame="frames[index]" :species="run.setup.species" :layers="layers"
+          <Board v-show="frames[index]" :ref="element=>boards[index]=element" :frame="frames[index]" :species="run.setup.species" :layers="layers"
             :camera="cam" :scope="scope" :dim="scope!=='all'" :selected="selections[index]" :follow="selections[index]!=null" @select="selections[index]=$event"/>
           <h2>{{ run.setup.name }} <small>Seed {{ run.setup.seed }} · {{ format(frames[index]?.time,1) }} s</small></h2>
         </section>
