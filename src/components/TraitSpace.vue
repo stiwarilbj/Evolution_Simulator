@@ -8,6 +8,7 @@ const emit=defineEmits(['watch'])
 const lab=useLab()
 const day=ref(1), compare=ref(0), track=ref(null), other=ref(null), chosenId=ref(null)
 const loading=ref(false), issue=ref(''), compareIssue=ref('')
+const replayAttempt=ref(0)
 const angle=ref(-.58), tilt=ref(.48), bins=ref(20), metric=ref('speed'), percent=ref(false)
 let request=0, compareRequest=0, gesture
 const scoped=frame=>frame?.final.blobs.filter(b=>b.alive && (props.scope==='all'||props.scope===b.species)) ?? []
@@ -19,7 +20,7 @@ const runId=()=>lab.run.id
 const dayAvailable=computed(()=>day.value<=lab.completed)
 watch(runId,()=>{ day.value=Math.max(1,lab.completed); compare.value=0 },{immediate:true})
 watch(chosen,blob=>{ if(!blob) chosenId.value=null })
-watch([day,runId,dayAvailable],async()=>{
+watch([day,runId,dayAvailable,replayAttempt],async()=>{
   const id=++request
   track.value=null
   chosenId.value=null
@@ -81,7 +82,10 @@ function watchCreature(){
   <section class="trait-space">
     <header><h2>Trait Space</h2><label>Day <input type="number" :value="day" min="1" :max="lab.completed || 1" @change="day=wholeNumber($event,day,1,lab.completed)"></label>
       <button class="secondary" @click="angle=-.58;tilt=.48">Reset view</button></header>
-    <p v-if="issue" class="issue">{{ issue }}</p>
+    <div v-if="issue">
+      <p class="issue" role="alert">Could not load Day {{ day }}. {{ issue }}</p>
+      <button class="secondary" @click="replayAttempt++">Retry Day {{ day }}</button>
+    </div>
     <p v-if="loading" class="quiet center" role="status">Loading Day {{ day }}…</p>
     <p v-else-if="!cohort.length && !issue" class="quiet center">Choose a completed day with living creatures.</p>
     <div v-else-if="cohort.length" class="trait-layout">

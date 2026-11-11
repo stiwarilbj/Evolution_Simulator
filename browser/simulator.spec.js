@@ -787,6 +787,40 @@ test('Trait Space keeps selections within the species filter and only loads whol
   expect(errors).toEqual([])
 })
 
+test('Trait Space can retry a failed day without changing the selected day', async ({ page }) => {
+  await delayReplays(page)
+  await openSimulator(page)
+  await startRun(page, '10', async () => {
+    await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('400')
+  })
+  await quickThrough(page, 3)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('link', { name: 'Trends', exact: true }).click()
+  const species = page.getByLabel('Filter By Species')
+  await species.selectOption('blue')
+  await page.getByRole('button', { name: 'Trait Space', exact: true }).click()
+
+  const traitSpace = page.locator('.trait-space')
+  const day = traitSpace.getByRole('spinbutton', { name: 'Day', exact: true })
+  const retry = traitSpace.getByRole('button', { name: 'Retry Day 3' })
+  await finishReplay(page, 3, 'fail')
+  const alert = traitSpace.getByRole('alert')
+  await expect(alert).toHaveText('Could not load Day 3. Replay unavailable')
+  await expect(day).toHaveValue('3')
+
+  await expect(retry).toBeEnabled()
+  await retry.click()
+  await expect(traitSpace.getByRole('status')).toHaveText('Loading Day 3…')
+  await expect(retry).toHaveCount(0)
+  await finishReplay(page, 3)
+  await expect(traitSpace.getByText(/^Day 3 · \d+ samples/)).toBeVisible()
+  await expect(traitSpace.getByLabel('Trait histogram')).toBeVisible()
+  await expect(alert).toHaveCount(0)
+  await expect(day).toHaveValue('3')
+  await expect(species).toHaveValue('blue')
+})
+
 test('renaming the active run keeps days whose saves are still pending', async ({ page }) => {
   await installSaveDelay(page)
   await openSimulator(page)
