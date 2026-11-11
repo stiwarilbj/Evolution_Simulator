@@ -215,6 +215,45 @@ test('Mini line points stay above their generation tiles when the window shrinks
   }
 })
 
+test('Mini line can plot Population and Age at Death', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page)
+  await quickThrough(page, 3)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  const options = page.getByRole('button', { name: 'Generation options' })
+  const legend = page.locator('.flower-legend')
+  const population = legend.getByRole('button', { name: 'Population', exact: true })
+  const deathAge = legend.getByRole('button', { name: 'Age at Death', exact: true })
+  const line = page.locator('.ribbon-line path')
+  const table = page.getByRole('dialog', { name: 'Generation statistics' })
+
+  await options.click()
+  await page.getByRole('button', { name: 'Mini line', exact: true }).click()
+  await population.click()
+  await expect(table).toBeHidden()
+  await expect(population).toHaveAttribute('aria-pressed', 'true')
+  await expect(line).toHaveAttribute('stroke', '#EEEDD6')
+  await expect(line).toHaveAttribute('d', /M.*L/)
+
+  await page.setViewportSize({ width: 512, height: 480 })
+  await deathAge.click()
+  await expect(deathAge).toHaveAttribute('aria-pressed', 'true')
+  await expect(population).toHaveAttribute('aria-pressed', 'false')
+  await expect(line).toHaveAttribute('stroke', '#DDDAD0')
+  await expect(line).toHaveAttribute('d', /M/)
+  const exactValues = legend.getByRole('button', { name: 'Exact values', exact: true })
+  await expect(exactValues).toBeInViewport({ ratio: 1 })
+  await exactValues.click()
+  await expect(table).toBeVisible()
+  await table.getByRole('button', { name: 'Done', exact: true }).click()
+
+  await options.click()
+  await page.getByRole('button', { name: /Walkthrough flower/ }).click()
+  await population.click()
+  await expect(table).toBeVisible()
+})
+
 test('browser Back closes a focused Trends chart and restores World controls', async ({ page }) => {
   await openSimulator(page)
   await startRun(page)

@@ -179,6 +179,8 @@ dd{margin:0;font-family:var(--mono);color:var(--cream);text-align:right}
 .day-tile:has(~ .more-tile):not(:has(.flower)){padding-top:93px}
 .flower-legend{position:absolute;inset:0 auto 0 0;width:184px;background:#080808;border-right:1px solid #33322d;padding:14px 14px 10px;z-index:2}
 .legend-key,.legend-help{min-height:24px;display:flex;align-items:center;gap:8px;color:var(--cream);font:12px var(--mono);padding:3px 3px;white-space:nowrap}
+.flower-legend.mini-line-legend{display:grid;grid-auto-rows:minmax(0,1fr);padding-block:3px}
+.mini-line-legend :is(.legend-key,.legend-help){min-height:0;padding-block:0}
 .legend-key i{width:12px;height:12px;background:var(--metric);border-radius:3px}
 .legend-key b{color:var(--focus);font-weight:400}.legend-help{color:var(--quiet);font-size:10px}
 .legend-key:hover,.legend-help:hover,.legend-toggle:hover{color:var(--focus)}

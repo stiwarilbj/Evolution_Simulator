@@ -13,7 +13,7 @@ const focusDay = ref(lab.viewing), detail = ref(null), detailX = ref(null)
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
 let observer
 legend.value = innerWidth >= 620
-const order = computed(() => mode.value === 'six' ? [1,2,3,4,5,0] : [1,3,4,5,0])
+const order = computed(() => mode.value === 'classic' ? [1,3,4,5,0] : [1,2,3,4,5,0])
 const rows = computed(() => lab.run.summaries.map(record => record.rows[lab.scope]))
 const bounds = computed(() => {
   const b = {}
@@ -111,6 +111,10 @@ function clickTile(event, tile) {
   }
   select(tile.day)
 }
+function chooseLegendMetric(metricIndex, position) {
+  if (metricIndex === 0 && mode.value !== 'line') emit('table')
+  else rotation.value = position
+}
 function anchorDetail() {
   if (!inspection.value || !scroll.value) return
   const tile = scroll.value.querySelector('[data-day="'+inspection.value+'"]')
@@ -183,12 +187,12 @@ function escapeDetail(event) {
           <button class="day-tile more-tile" aria-label="More Generations" @click="lab.modal='extend'"><Layers :size="25"/><span>More</span></button>
         </div>
       </div>
-      <div v-if="legend" class="flower-legend">
-        <button v-for="(idx,i) in order" :key="idx" class="legend-key" :aria-pressed="idx===0 ? undefined : i===rotation"
-          @click="idx===0 ? emit('table') : rotation=i" :style="{ '--metric':METRICS[idx].petal }">
-          <i></i>{{ METRICS[idx].short }}<b v-if="idx!==0 && i===rotation">•</b>
+      <div v-if="legend" class="flower-legend" :class="{ 'mini-line-legend':mode==='line' }">
+        <button v-for="(idx,i) in order" :key="idx" class="legend-key" :aria-pressed="idx===0 && mode!=='line' ? undefined : i===rotation"
+          @click="chooseLegendMetric(idx,i)" :style="{ '--metric':METRICS[idx].petal }">
+          <i></i>{{ METRICS[idx].short }}<b v-if="i===rotation" aria-hidden="true">•</b>
         </button>
-        <button class="legend-help" @click="emit('table')"><Info :size="13"/> Scale and exact values</button>
+        <button class="legend-help" @click="emit('table')"><Info :size="13"/> {{ mode==='line' ? 'Exact values' : 'Scale and exact values' }}</button>
         <button class="legend-toggle" aria-label="Hide generation legend" @click="legend=false"><ChevronLeft :size="16"/></button>
       </div>
       <button v-else class="icon legend-open" aria-label="Show generation legend" @click="legend=true"><ChevronRight :size="16"/></button>
