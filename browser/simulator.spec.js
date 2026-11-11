@@ -1192,6 +1192,32 @@ test('Watch creature follows a newborn at dusk or at the next recorded dawn', as
   await expect(current).toBeVisible()
 })
 
+test('creature details show refuge distance while a replayed blob is returning', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page)
+  await quickThrough(page, 1)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
+  await page.getByRole('button', { name: 'Watch last day' }).click()
+  await expect(page.getByRole('button', { name: 'Run options' })).toHaveText('Day 1 / 10 · Replay')
+
+  await page.getByRole('button', { name: 'View options' }).click()
+  await page.getByRole('button', { name: 'Creatures', exact: true }).click()
+  const details = page.getByRole('complementary', { name: 'Creature details' })
+  await details.getByRole('combobox', { name: 'Creature', exact: true }).selectOption('1')
+  const time = page.getByRole('slider', { name: 'Replay time' })
+  const distance = details.getByText(/^\d[\d,.]* units from the nearest refuge$/)
+  await expect(distance).toHaveCount(0)
+
+  // In the starter setup, founder #1 returns to its refuge from about 0.75 to 1.45 s.
+  await time.fill('1')
+  await expect(details.getByText('Returning', { exact: true })).toBeVisible()
+  await expect(distance).toBeVisible()
+
+  await time.fill('2')
+  await expect(details.getByText('Home', { exact: true })).toBeVisible()
+  await expect(distance).toHaveCount(0)
+})
+
 test('creature details use the movement and energy rules for the day being watched', async ({ page }) => {
   await openSimulator(page)
   await startRun(page, '10', async () => {

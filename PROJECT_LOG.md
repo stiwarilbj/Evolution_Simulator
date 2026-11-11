@@ -49,3 +49,4 @@
 - Fixed Trends keyboard controls so the first arrow press selects the first visible day when no visible day is selected.
 - Fixed Trait Space so a chart with one trait value centers the average line and shows the value once.
 - Fixed World so clearing a creature selection shows the enabled layers for all creatures again.
+- Fixed Creature Details so replays show the distance to the nearest refuge while a blob is returning.

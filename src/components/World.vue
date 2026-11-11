@@ -26,6 +26,7 @@ const layerNames = [
   ['credits',Utensils,'Food credits','Olive for plants · rust for prey'],
 ]
 const visible = computed(() => lab.frame?.blobs.find(b => b.id===lab.selected))
+const creatureState = computed(() => STATES[visible.value?.state])
 const species = computed(() => lab.run.setup.species.find(s => s.id===visible.value?.species))
 const rules = computed(() => rulesFor(lab.run.setup,lab.run.revisions,lab.frame?.day ?? lab.viewing))
 const cohort = computed(() => {
@@ -215,8 +216,8 @@ defineExpose({ select, overhead:()=>{ lab.following=false; camera.value='overhea
           <option v-for="b in living" :key="b.id" :value="b.id">#{{ b.id }} · {{ lab.run.setup.species.find(s=>s.id===b.species)?.name }}</option>
         </select></label>
         <template v-if="visible">
-          <p>{{ STATES[visible.state] }} <span v-if="!visible.alive">· {{ creatureEvents.find(e=>e.type==='death')?.cause }}</span></p>
-          <p v-if="visible.returning && !visible.home" class="quiet">{{ format(homePoints(visible)[0].distance,1) }} units from the nearest refuge</p>
+          <p>{{ creatureState }} <span v-if="!visible.alive">· {{ creatureEvents.find(e=>e.type==='death')?.cause }}</span></p>
+          <p v-if="creatureState === 'Returning'" class="quiet">{{ format(homePoints(visible)[0].distance,1) }} units from the nearest refuge</p>
           <progress :value="visible.energy" :max="visible.capacity" aria-label="Remaining energy"></progress>
           <small>{{ format(visible.energy,1) }} / {{ visible.capacity }} energy</small>
           <dl><template v-for="[name,value] in [
