@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { BatteryMedium, CircleX, Copy, Dices, Leaf, Plus, Check, Trash2 } from 'lucide-vue-next'
 import { useLab } from '../store.js'
-import { LEGACY_RULE_VERSION, PALETTE, TRAITS, randomSeed, speciesTemplate, validate } from '../engine/config.js'
+import { endsWhenSettled, LEGACY_RULE_VERSION, PALETTE, TRAITS, VERSION, randomSeed, speciesTemplate, validate } from '../engine/config.js'
 import { travel, cost, walkthroughStepCost } from '../engine/geometry.js'
 import NumberField from './NumberField.vue'
 
@@ -26,7 +26,7 @@ const mutationProfile = computed({
   },
 })
 const seconds = computed({
-  get: () => draft.duration === '' ? '' : draft.duration / 10,
+  get: () => draft.duration == null || draft.duration === '' ? '' : draft.duration / 10,
   set: value => { draft.duration = value === '' ? '' : value * 10 },
 })
 const total = computed(() => draft.species.filter(s=>s.enabled).reduce((sum,s)=>sum+(Number(s.count)||0),0))
@@ -196,9 +196,18 @@ onMounted(()=>dialog.value.showModal())
         <div class="setting-inset final-fields">
           <label class="run-name">Run name <input id="name" v-model="draft.name" maxlength="60"></label>
           <NumberField id="days" v-model="draft.days" label="Days to run" :min="10" :max="1000" :error="issue.days"/>
-          <NumberField id="duration" v-model="seconds" label="Seconds per day" :min="1" :max="60" :step=".1" :error="issue.duration"/>
-          <div class="quick-picks"><button v-for="n in [1,5,10,20,30,60]" :key="n" type="button" class="secondary" :aria-pressed="seconds===n" @click="seconds=n">{{ n }} s</button></div>
-          <small class="quiet">{{ ((draft.days*seconds)/60).toFixed(1) }} min of playback at 1×</small>
+          <label v-if="draft.version === VERSION" class="run-name">End each day
+            <select v-model="draft.endMode">
+              <option value="settled">When all blobs settle or die</option>
+              <option value="timed">After a fixed time</option>
+            </select>
+          </label>
+          <small v-if="endsWhenSettled(draft)" class="quiet">Each day lasts as long as the blobs need to finish. The run stops if the population reaches zero.</small>
+          <template v-else>
+            <NumberField id="duration" v-model="seconds" label="Seconds per day" :min="1" :max="60" :step=".1" :error="issue.duration"/>
+            <div class="quick-picks"><button v-for="n in [1,5,10,20,30,60]" :key="n" type="button" class="secondary" :aria-pressed="seconds===n" @click="seconds=n">{{ n }} s</button></div>
+            <small class="quiet">Up to {{ ((draft.days*seconds)/60).toFixed(1) }} min of playback at 1×</small>
+          </template>
           <NumberField id="seed" v-model="draft.seed" label="Random seed" :min="1" :max="100" :disabled="fork!=null" :error="issue.seed"/>
           <div class="seed-actions">
             <button v-if="fork==null" type="button" class="secondary" @click="draft.seed=randomSeed(draft.seed)"><Dices :size="16"/> Roll seed</button>

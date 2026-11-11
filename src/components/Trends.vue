@@ -135,8 +135,8 @@ watch(focused, async key=>{
         <button class="secondary" @click="downloadVisibleDays"><Download :size="17"/> Download</button>
         <button class="icon" title="Run again" aria-label="Run again" @click="emit('restart')"><RotateCcw :size="17"/></button>
         <button class="icon" title="Reroll seed" aria-label="Reroll seed" @click="emit('reroll')"><Dices :size="17"/></button>
-        <button class="icon" title="More Generations" aria-label="More Generations" @click="lab.modal='extend'"><Layers :size="17"/></button>
-        <button class="secondary" @click="lab.modal=lab.batch?'quick-progress':'quick'"><FastForward :size="17"/> {{ lab.batch?'Progress':'Quick Sim' }}</button>
+        <button v-if="!lab.extinctDay" class="icon" title="More Generations" aria-label="More Generations" @click="lab.modal='extend'"><Layers :size="17"/></button>
+        <button class="secondary" :disabled="!!lab.extinctDay && !lab.batch" @click="lab.modal=lab.batch?'quick-progress':'quick'"><FastForward :size="17"/> {{ lab.batch?'Progress':'Quick Sim' }}</button>
       </div>
     </div>
     <div v-if="range==='custom'" class="range-fields"><label>From day <input v-model.number="from" type="number" min="1" :max="lab.completed || 1"></label>

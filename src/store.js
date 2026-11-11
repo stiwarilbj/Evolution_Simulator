@@ -15,6 +15,10 @@ const makeRun = setup => {
     summaries: [], checkpoints: [{ day: 0, ...initial }], latest: initial, partial: null }
 }
 const last = run => run?.summaries.at(-1)?.day ?? 0
+const extinctionDay = run => run?.latest.roster.length === 0
+  ? run.summaries.find(row => row.rows.all.population === 0)?.day ?? null
+  : null
+const hasEnded = frame => frame?.duration != null && frame.time >= frame.duration
 function recordDay(run, { day, checkpoint, summary }) {
   const checkpoints = day % 10 === 0 ? [...run.checkpoints, { day, ...checkpoint }] : run.checkpoints
   return { ...run, summaries: [...run.summaries, summary], latest: checkpoint, partial: null, checkpoints }
@@ -58,7 +62,7 @@ function prepareExperiment(setup, signal, progress) {
       }
       if (data.type === 'done') {
         cleanup()
-        if (last(experiment) !== setup.days) reject(new Error('The experiment ended before the requested day.'))
+        if (last(experiment) !== setup.days && !extinctionDay(experiment)) reject(new Error('The experiment ended before the requested day.'))
         else resolve(experiment)
       }
     }
@@ -81,16 +85,21 @@ export const useLab = defineStore('lab', () => {
   const draftChanged = computed(() => draft.value != null && JSON.stringify(draft.value) !== openingDraft)
   const downloadRange = shallowRef(null)
   const completed = computed(() => run.value ? last(run.value) : 0)
-  const latestBranchDay = computed(() => Math.min(completed.value, (run.value?.setup.days ?? 1) - 1))
-  const displayDuration = computed(() => frame.value?.duration ?? (run.value?.setup.duration ?? 100) / 10)
+  const extinctDay = computed(() => extinctionDay(run.value))
+  const latestBranchDay = computed(() => Math.min(completed.value, (run.value?.setup.days ?? 1) - 1,
+    (extinctDay.value ?? Infinity) - 1))
+  const dayEnded = computed(() => hasEnded(frame.value))
+  const displayDuration = computed(() => frame.value ? frame.value.duration : null)
   const liveDay = computed(() => liveFrame.value?.day ?? completed.value + 1)
-  const canEnterLive = computed(() => workerReady.value && !batch.value && completed.value < (run.value?.setup.days ?? 0))
+  const canEnterLive = computed(() => workerReady.value && !batch.value && !extinctDay.value &&
+    completed.value < (run.value?.setup.days ?? 0))
   const canMoveNext = computed(() => viewing.value < completed.value ||
     (viewing.value === completed.value && canEnterLive.value))
   const status = computed(() => {
     if (loading.value) return 'Building replay'
     if (batch.value?.stopping) return 'Stopping batch'
     if (!replay.value && batch.value) return 'Simulating'
+    if (!replay.value && extinctDay.value) return 'Extinct'
     if (!replay.value && completed.value >= (run.value?.setup.days ?? Infinity)) return 'Finished'
     if (replay.value) return 'Replay'
     if (workerError.value) return 'Simulation unavailable'
@@ -207,7 +216,7 @@ export const useLab = defineStore('lab', () => {
         liveFrame.value = final
         if (!replay.value && !loading.value) {
           frame.value = final
-          if (playing.value && through.value && day < run.value.setup.days) {
+          if (playing.value && through.value && !extinctDay.value && day < run.value.setup.days) {
             requestedDawn = true
             writer.postMessage({ type: 'dawn' })
           } else playing.value = false
@@ -222,7 +231,7 @@ export const useLab = defineStore('lab', () => {
     if (data.type === 'done') {
       const finished = batch.value
       const stopped = data.stopped && data.day < finished?.target
-      const prepare = autoPrepare && data.day === 1 && !data.stopped && !finished?.stopping
+      const prepare = autoPrepare && data.day === 1 && !extinctDay.value && !data.stopped && !finished?.stopping
       const mayShowReplay = batchViewRequest === request && !loading.value && !replay.value
       batch.value = null
       autoPrepare = false
@@ -230,15 +239,15 @@ export const useLab = defineStore('lab', () => {
         if (mayShowReplay) void openDay(1)
         if (run.value.setup.days > 1) simulate(run.value.setup.days, 'Preparing')
       } else if (!replay.value && !loading.value) {
-        if (mayShowReplay && (finished?.label === 'Finish Day' || data.day >= run.value.setup.days)) {
+        if (mayShowReplay && (extinctDay.value || finished?.label === 'Finish Day' || data.day >= run.value.setup.days)) {
           void openDay(data.day, Infinity)
-        } else if (liveFrame.value) {
+        } else if (liveFrame.value && !extinctDay.value) {
           frame.value = liveFrame.value
           viewing.value = liveFrame.value.day
         }
       }
       if (modal.value === 'quick-progress' && finished) {
-        modal.value = stopped ? 'quick-stopped' : 'quick-done'
+        modal.value = stopped && !extinctDay.value ? 'quick-stopped' : 'quick-done'
       }
     }
   }
@@ -259,7 +268,7 @@ export const useLab = defineStore('lab', () => {
       })
     } else if (run.value && writer) {
       const oldWriter = writer
-      if (!replay.value && liveFrame.value?.time > 0 && liveFrame.value.time < liveFrame.value.duration) {
+      if (!replay.value && liveFrame.value?.time > 0 && !hasEnded(liveFrame.value)) {
         await new Promise(resolve => {
           const timeout = setTimeout(finish, 150)
           function finish() { clearTimeout(timeout); oldWriter.removeEventListener('message', onPartial); resolve() }
@@ -304,14 +313,16 @@ export const useLab = defineStore('lab', () => {
     error.value = ''
     workerError.value = ''
     try { localStorage.setItem('evolution.active', value.id) } catch {}
-    const day = Math.min(last(value) + 1, value.setup.days)
+    const day = extinctDay.value ? last(value) : Math.min(last(value) + 1, value.setup.days)
     viewing.value = day
-    frame.value = value.partial ? snapshot(value.partial) :
-      day > last(value) ? snapshot(dawn(rulesFor(value.setup,value.revisions,day), day, value.latest)) : null
+    frame.value = null
+    if (day > last(value)) {
+      frame.value = snapshot(value.partial ?? dawn(rulesFor(value.setup,value.revisions,day), day, value.latest))
+    }
     liveFrame.value = frame.value
     if (restoredTrack) {
       cache.set(value.id + ':' + restoreDay, restoredTrack)
-      showReplay(restoredTrack, 0, false)
+      showReplay(restoredTrack, restoreDay === extinctDay.value ? Infinity : 0, false)
     }
     if (newRun) persist()
     const connected = await connect(value)
@@ -320,9 +331,9 @@ export const useLab = defineStore('lab', () => {
       autoPrepare = true
       simulate(1, 'Preparing')
     } else if (viewRequest === request && !restoredTrack) {
-      if (restoreDay >= 1 && restoreDay <= last(value)) await openDay(restoreDay)
-      else if (restoreDay == null && (value.setup.mode === 'prepare' || last(value) >= value.setup.days)) {
-        await openDay(last(value))
+      if (restoreDay >= 1 && restoreDay <= last(value)) await openDay(restoreDay, restoreDay === extinctDay.value ? Infinity : 0)
+      else if (restoreDay == null && (extinctDay.value || value.setup.mode === 'prepare' || last(value) >= value.setup.days)) {
+        await openDay(last(value), extinctDay.value ? Infinity : 0)
       }
     }
     return switchId === runRequest && isCurrent()
@@ -530,8 +541,8 @@ export const useLab = defineStore('lab', () => {
     if (playing.value || waiting) { stopPlayback(); return }
     if (loading.value || !frame.value || (!replay.value && (!workerReady.value || batch.value))) return
     if (replay.value && cursor >= displayDuration.value) seek(0)
-    else if (!replay.value && frame.value.time >= frame.value.duration) {
-      if (completed.value >= run.value.setup.days) { void openDay(completed.value, 0, true); return }
+    else if (!replay.value && dayEnded.value) {
+      if (extinctDay.value || completed.value >= run.value.setup.days) { void openDay(completed.value, 0, true); return }
       requestedDawn = true
       writer.postMessage({ type: 'dawn' })
     }
@@ -541,7 +552,7 @@ export const useLab = defineStore('lab', () => {
   function stepOnce() {
     stopPlayback()
     if (replay.value) seek(cursor + (track?.stepSeconds ?? DT))
-    else if (workerReady.value && !loading.value && !pending && !batch.value && frame.value?.time < displayDuration.value) {
+    else if (canEnterLive.value && !loading.value && !pending && frame.value && !dayEnded.value) {
       pending = true
       writer.postMessage({ type: 'advance', ticks: 1 })
     }
@@ -568,7 +579,7 @@ export const useLab = defineStore('lab', () => {
         if (cursor >= track.duration) {
           playing.value = false
           if (through.value && track.day < completed.value) void openDay(track.day + 1, 0, true)
-          else if (through.value && batch.value && track.day < run.value.setup.days) waiting = { day: track.day + 1, resume: true }
+          else if (through.value && batch.value && !extinctDay.value && track.day < run.value.setup.days) waiting = { day: track.day + 1, resume: true }
         }
       } else if (!batch.value) {
         remainder = Math.min(0.4, remainder + delta)
@@ -610,7 +621,7 @@ export const useLab = defineStore('lab', () => {
   }
 
   function extend(days) {
-    if (!workerReady.value || batch.value || days <= run.value.setup.days || days > 1000) return
+    if (!workerReady.value || batch.value || extinctDay.value || days <= run.value.setup.days || days > 1000) return
     run.value = { ...run.value, setup: { ...run.value.setup, days } }
     writer.postMessage({ type: 'extend', days })
     persist()
@@ -693,7 +704,7 @@ export const useLab = defineStore('lab', () => {
   }
 
   async function branch(day, setup) {
-    if (!run.value || day < 1 || day > completed.value || Object.keys(validate(setup)).length) return false
+    if (!run.value || day < 1 || day > latestBranchDay.value || Object.keys(validate(setup)).length) return false
     const base = run.value
     const opening = [...base.checkpoints].reverse().find(c => c.day <= day)
     const after = opening.day === day ? opening : (await getTrack(base, day)).checkpoint
@@ -711,7 +722,7 @@ export const useLab = defineStore('lab', () => {
 
   return { run, library, frame, viewing, liveFrame, liveDay, replay, playing, rate, through, scope, loading, batch, saved,
     error, workerReady, connecting, workerError, retrySimulation, replayDay, replayFailure, cancelReplay, retryReplay,
-    canEnterLive, canMoveNext, selected, following, settings, draft, modal, completed, latestBranchDay, displayDuration, status, init, openDay, goLive, seek, play,
+    canEnterLive, canMoveNext, selected, following, settings, draft, modal, completed, extinctDay, latestBranchDay, dayEnded, displayDuration, status, init, openDay, goLive, seek, play,
     stopPlayback, toggleThrough, stepOnce, moveDay, simulate, stopBatch, extend, openSettings, closeSettings, draftChanged, resetDraft, evolve, switchRun, rename,
     remove, getTrack, branch, prepareOrLive, targetDay, quickForDay, branchFrom, importBranch, preparePair, openDownload, downloadRange }
 })

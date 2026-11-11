@@ -18,6 +18,11 @@ async function startRun(page, days = '10', configure) {
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled()
 }
 
+async function fixedDay(page, seconds = '10') {
+  await page.getByRole('combobox', { name: 'End each day' }).selectOption('timed')
+  await page.getByRole('spinbutton', { name: 'Seconds per day', exact: true }).fill(seconds)
+}
+
 async function quickThrough(page, day, trigger = 'Quick Sim') {
   await page.getByRole('button', { name: trigger, exact: true }).click()
   await page.getByRole('button', { name: 'Complete through day' }).click()
@@ -134,6 +139,7 @@ test('the production build runs a new experiment and shows its charts @pages', a
   await openSimulator(page)
   await expect(page.getByRole('heading', { name: 'Current Generation Stats' })).toBeVisible()
   await startRun(page, '10', async () => {
+    await expect(page.getByRole('combobox', { name: 'End each day' })).toHaveValue('settled')
     await page.getByRole('button', { name: /^Refill rewards/ }).click()
     await expect(page.getByRole('spinbutton', { name: 'Plant reward' })).toHaveValue('0')
     await expect(page.getByRole('spinbutton', { name: 'Prey reward' })).toHaveValue('0')
@@ -149,6 +155,64 @@ test('the production build runs a new experiment and shows its charts @pages', a
   await expect(page.locator('.trends canvas').first()).toBeVisible()
   expect(new URL(page.url()).pathname).toBe(app.pathname)
   expect(problems).toEqual([])
+})
+
+test('live generations end when settled and Quick Sim stops at the extinction tile @pages', async ({ page }) => {
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+  await openSimulator(page)
+  await startRun(page, '10', async () => {
+    await page.getByRole('spinbutton', { name: 'Random seed' }).fill('3')
+    await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('10')
+  })
+  await expect(page.getByText('0.00 s elapsed')).toBeVisible()
+  await page.getByRole('button', { name: 'Play through generations' }).click()
+  const speed = page.getByRole('button', { name: 'Viewing speed', exact: true })
+  await speed.click()
+  await page.getByRole('slider', { name: 'Viewing speed multiplier' }).fill('12')
+  await speed.click()
+  await page.getByRole('button', { name: 'Play', exact: true }).click()
+  await expect(page.getByText('Day 1 · Final')).toBeVisible()
+  await expect(page.getByRole('progressbar', { name: 'Current day elapsed' })).toHaveAttribute('aria-valuemax', '5')
+  await page.getByRole('button', { name: 'Next day' }).click()
+  await expect(page.getByText('Day 2 · Ready')).toBeVisible()
+
+  await quickThrough(page, 10)
+  await expect(page.getByRole('heading', { name: 'Population extinct' })).toBeVisible()
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 4')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  const tile = page.getByRole('button', { name: /Extinct on Day 4/ })
+  await expect(tile.locator('svg')).toBeVisible()
+  await expect(tile.locator('xpath=preceding-sibling::*[1]')).toHaveAttribute('data-day', '4')
+  await expect(dayTile(page, 5)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Next day' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Quick Sim', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'More Generations' })).toHaveCount(0)
+
+  await dayTile(page, 3).click()
+  await tile.click()
+  const time = page.getByRole('slider', { name: 'Replay time' })
+  await expect(time).toHaveValue('5.9')
+  await page.reload()
+  await expect(tile).toBeVisible()
+  await expect(time).toHaveValue('5.9')
+  await page.getByRole('link', { name: 'Trends', exact: true }).click()
+  await expect(page.getByText(/Browser test run .* Through Day 4/)).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('preparing a run that goes extinct on Day 1 opens its final replay', async ({ page }) => {
+  await openSimulator(page)
+  await page.getByRole('button', { name: 'Simulation Settings' }).click()
+  await page.getByRole('spinbutton', { name: 'Energy', exact: true }).fill('10')
+  await page.getByRole('button', { name: /^Prepare and watch/ }).click()
+  await page.getByRole('button', { name: 'Evolve!' }).click()
+
+  await expect(page.getByRole('button', { name: /Extinct on Day 1/ })).toBeVisible()
+  await expect(page.getByRole('slider', { name: 'Replay time' })).toHaveValue('0.1')
+  await expect(page.getByRole('button', { name: 'Next day' })).toBeDisabled()
+  await page.getByRole('button', { name: 'Run options' }).click()
+  await expect(page.getByRole('button', { name: 'Branch here' })).toBeDisabled()
 })
 
 test('World fits split windows and keeps its controls in full screen', async ({ page }) => {
@@ -227,7 +291,7 @@ test('World continues drawing live playback after losing WebGL', async ({ page }
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await openSimulator(page)
-  await startRun(page)
+  await startRun(page, '10', () => fixedDay(page))
 
   const field = page.getByRole('region', { name: 'Simulation field' })
   const canvas = field.locator('canvas.world-canvas')
@@ -410,7 +474,7 @@ test('Trends marks the food rules used on each completed day of a branch', async
 
 test('a food-only branch keeps the day length at the fork', async ({ page }) => {
   await openSimulator(page)
-  await startRun(page)
+  await startRun(page, '10', () => fixedDay(page))
   await quickThrough(page, 2)
   await expect(batchStatus(page, 'Saved through')).toHaveText('Day 2')
   await page.getByRole('button', { name: 'Close', exact: true }).click()
@@ -712,6 +776,7 @@ test('Settings rejects invalid day lengths instead of rounding them', async ({ p
   await openSimulator(page)
   await page.getByRole('button', { name: 'Simulation Settings' }).click()
   const settings = page.getByRole('dialog', { name: 'Simulation Settings' })
+  await fixedDay(page)
   const seconds = settings.getByRole('spinbutton', { name: 'Seconds per day', exact: true })
   const evolve = settings.getByRole('button', { name: 'Evolve!' })
   await settings.getByRole('spinbutton', { name: 'Days to run' }).fill('10')
@@ -845,6 +910,7 @@ test('Trends compares sight spread in the filtered days and opens each closing c
   })
   await openSimulator(page)
   await startRun(page, '10', async () => {
+    await fixedDay(page)
     await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('400')
     await page.getByRole('button', { name: /^Orange/ }).click()
     await page.getByLabel('Enabled', { exact: true }).check()
@@ -895,6 +961,7 @@ test('Trends compares sight spread in the filtered days and opens each closing c
 test('Trait Space shows exact ages and newborn shares for both days and the selected species', async ({ page }) => {
   await openSimulator(page)
   await startRun(page, '10', async () => {
+    await fixedDay(page)
     await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('400')
     await page.getByRole('button', { name: /^Orange/ }).click()
     await page.getByLabel('Enabled', { exact: true }).check()
@@ -1329,7 +1396,8 @@ test('Watch creature follows a newborn at dusk or at the next recorded dawn', as
   const current = page.getByRole('button', { name: /CURRENT CREATURE.*#51/ })
   await watchCreature.click()
   await expect(runOptions).toHaveText('Day 1 / 10 · Replay')
-  await expect(replayTime).toHaveValue('10')
+  const end = Number(await replayTime.getAttribute('max'))
+  await expect.poll(async () => Math.abs(Number(await replayTime.inputValue()) - end)).toBeLessThan(1e-8)
   await expect(current).toBeVisible()
   await current.click()
   await expect(page.getByRole('button', { name: /Born to #/ })).toBeVisible()
@@ -1463,7 +1531,7 @@ test('creature details use the movement and energy rules for the day being watch
 
 test('replay stops at the next live day and the saved results survive a reload', async ({ page }) => {
   await openSimulator(page)
-  await startRun(page)
+  await startRun(page, '10', () => fixedDay(page))
   await page.getByRole('button', { name: 'Play', exact: true }).click()
   await expect.poll(async () => Number(await page.getByRole('progressbar', { name: 'Current day elapsed' }).getAttribute('aria-valuenow')))
     .toBeGreaterThan(0)
@@ -1506,7 +1574,7 @@ test('replay stops at the next live day and the saved results survive a reload',
 test('playback actions disable advancing at dusk and work again on the next day', async ({ page }) => {
   await openSimulator(page)
   await startRun(page, '10', async () => {
-    await page.getByRole('spinbutton', { name: 'Seconds per day', exact: true }).fill('1')
+    await fixedDay(page, '1')
     await page.getByRole('button', { name: /^Advanced Rules/ }).click()
     await expect(page.getByRole('combobox', { name: /^Energy model/ })).toHaveValue('walkthrough')
     await expect(page.getByText('10.002 energy per 0.1 s step for Blue')).toBeVisible()
@@ -1569,7 +1637,8 @@ test('turning off Play Through cancels an automatic replay that is still loading
   await expect(runOptions).toHaveText('Day 1 / 10 · Replay')
   await through.click()
   await expect(through).toHaveAttribute('aria-pressed', 'true')
-  await replayTime.fill('9.9')
+  const end = await replayTime.getAttribute('max')
+  await replayTime.fill(String(Number(end) - 0.1))
   await page.getByRole('button', { name: 'Play', exact: true }).click()
   await expect(page.getByText('Building replay for Day 2…')).toBeVisible()
 
@@ -1577,7 +1646,7 @@ test('turning off Play Through cancels an automatic replay that is still loading
   await expect(page.getByRole('button', { name: 'Replay day', exact: true })).toBeEnabled()
   await finishReplay(page, 2)
   await expect(runOptions).toHaveText('Day 1 / 10 · Replay')
-  await expect(replayTime).toHaveValue('10')
+  await expect.poll(async () => Math.abs(Number(await replayTime.inputValue()) - Number(end))).toBeLessThan(1e-8)
   await expect(through).toHaveAttribute('aria-pressed', 'false')
 
   await page.getByRole('button', { name: 'Next day', exact: true }).click()
@@ -1588,7 +1657,7 @@ test('turning off Play Through cancels an automatic replay that is still loading
 
 test('canceling Quick Sim leaves a finished replay at dusk', async ({ page }) => {
   await openSimulator(page)
-  await startRun(page)
+  await startRun(page, '10', () => fixedDay(page))
   await quickThrough(page, 1)
   await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
   await page.getByRole('button', { name: 'Watch last day' }).click()
@@ -1808,7 +1877,10 @@ test('Compare hides stale boards while changing days and can retry the same day'
   })
   await openSimulator(page)
   for (const name of ['Right archive', 'Left archive']) {
-    await startRun(page, '10', () => page.getByLabel('Run name').fill(name))
+    await startRun(page, '10', async () => {
+      await fixedDay(page)
+      await page.getByLabel('Run name').fill(name)
+    })
     await quickThrough(page, 2)
     await expect(batchStatus(page, 'Saved through')).toHaveText('Day 2')
     await page.getByRole('button', { name: 'Close', exact: true }).click()
@@ -1902,7 +1974,7 @@ test('retry after a crash in full screen keeps completed days and restarts unche
     }
   })
   await openSimulator(page)
-  await startRun(page)
+  await startRun(page, '10', () => fixedDay(page))
   await quickThrough(page, 3)
   await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
   await page.getByRole('button', { name: 'Close', exact: true }).click()

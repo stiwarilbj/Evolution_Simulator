@@ -1,4 +1,4 @@
-import { plantsForDay, TRAITS } from './config.js'
+import { endsWhenSettled, plantsForDay, TRAITS } from './config.js'
 import { random, normal, shuffle } from './random.js'
 import { summaries } from './stats.js'
 import { FIELD, DT, WALKTHROUGH_STEP, Grid, clamp, radius, travel, cost, walkthroughStepCost,
@@ -40,7 +40,8 @@ export function dawn(config, day, checkpoint) {
   const plants = Array.from({ length: plantsForDay(config, day) }, (_, id) => ({
     id, x: 12 + 476 * random(config.seed, 5, day, id, 0), y: 12 + 476 * random(config.seed, 5, day, id, 1), eaten: false,
   }))
-  return { day, tick: 0, stepSeconds, limit: Math.round(config.duration / 10 / stepSeconds),
+  const limit = endsWhenSettled(config) ? null : Math.round(config.duration / 10 / stepSeconds)
+  return { day, tick: 0, stepSeconds, limit,
     nextId, opening: roster, blobs, plants, events: [], settled: false }
 }
 
@@ -70,7 +71,8 @@ function nearest(blob, candidates, eligible) {
 function intent(blob, ctx, config, plantGrid, blobGrid) {
   const nearby = [...blobGrid.near(blob.x, blob.y, blob.sense)]
   const threat = nearest(blob, nearby, other => canHunt(other, blob, config) && other.credits < 2)
-  const left = Math.min((ctx.limit - ctx.tick) * (ctx.stepSeconds ?? DT), blob.energy / blob.rate)
+  const timeLeft = ctx.limit == null ? Infinity : (ctx.limit - ctx.tick) * (ctx.stepSeconds ?? DT)
+  const left = Math.min(timeLeft, blob.energy / blob.rate)
   const homes = homePoints(blob)
   const base = homes[0]
   const towards = target => Math.atan2(target.y - blob.y, target.x - blob.x)
@@ -247,21 +249,24 @@ function tick(ctx, config) {
 }
 
 export function step(ctx, config, count = 1, skipIdle = false) {
-  const stop = Math.min(ctx.limit, ctx.tick + count)
+  if (ctx.settled) return ctx.settled
+  const stop = Math.min(ctx.limit ?? Infinity, ctx.tick + count)
+  const hasActive = () => ctx.blobs.some(b => b.alive && !b.home)
   while (ctx.tick < stop) {
-    if (skipIdle && !ctx.blobs.some(b => b.alive && !b.home)) {
+    if ((ctx.limit == null || skipIdle) && !hasActive()) {
+      if (ctx.limit == null) break
       ctx.tick = stop
       break
     }
     tick(ctx, config)
   }
-  return ctx.tick === ctx.limit ? dusk(ctx, config) : null
+  return ctx.tick === ctx.limit || (ctx.limit == null && !hasActive()) ? dusk(ctx, config) : null
 }
 
 export function dusk(ctx, config) {
   if (ctx.settled) return ctx.settled
   const closing = []
-  const time = ctx.limit * (ctx.stepSeconds ?? DT)
+  const time = (ctx.limit ?? ctx.tick) * (ctx.stepSeconds ?? DT)
   const species = new Map(config.species.map(s => [s.id, s]))
   for (const b of ctx.blobs) {
     if (!b.alive) continue
@@ -294,6 +299,8 @@ export function dusk(ctx, config) {
 
 export function snapshot(ctx) {
   const stepSeconds = ctx.stepSeconds ?? DT
-  return { day: ctx.day, time: ctx.tick * stepSeconds, duration: ctx.limit * stepSeconds, stepSeconds,
+  const time = ctx.tick * stepSeconds
+  const duration = ctx.settled ? time : ctx.limit == null ? null : ctx.limit * stepSeconds
+  return { day: ctx.day, time, duration, stepSeconds,
     blobs: [...ctx.blobs, ...(ctx.newborns ?? [])], plants: ctx.plants.filter(p => !p.eaten), events: ctx.events }
 }

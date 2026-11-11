@@ -15,6 +15,7 @@ const chapters=[
   ['Energy','By default, each move costs energy equal to size cubed times movement speed squared, plus sight range, divided by 10,000. Movement speed is measured in units per 0.1-second step.'],
   ['Predation','In new setups, prey can be at most 80% of the hunter’s size. A blob of size 12.5 can eat a blob of size 10.'],
   ['Getting home','A plant or prey gives one food credit. By default, energy refills at dawn. Return to the edge with one credit to survive or two to have one offspring.'],
+  ['Extinction','By default, a day ends when every blob has reached refuge or died. If no blobs survive, the run ends and the ribbon shows an extinction tile.'],
   ['Inheritance','A newborn samples each enabled trait from a normal distribution centered on its parent.'],
   ['Read a flower','A flower combines the day’s mean traits and its closing population.'],
   ['Trends','Percentiles, extrema, birth and death counts, and supply reveal change across generations.'],

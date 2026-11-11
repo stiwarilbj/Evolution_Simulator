@@ -206,7 +206,7 @@ function draw3d(blobs, frame, view, { min, max }) {
   const close = props.follow && chosen?.alive
   for (const [i, b] of blobs.entries()) {
     const x = b.x - 250, z = b.y - 250, r = b.r
-    const moving = b.alive && b.state < 5 && frame.time > 0 && frame.time < frame.duration
+    const moving = b.alive && b.state < 5 && frame.time > 0 && (frame.duration == null || frame.time < frame.duration)
     const bite = close && b.id===chosen.id && recentBites.has(b.id) ? 1-(frame.time-recentBites.get(b.id))/.28 : 0
     const bob = moving && !reduced.matches ? Math.sin(frame.time * 17 + b.id) * .10 + bite*.15 : 0
     const born = b.state === 7

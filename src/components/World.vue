@@ -44,8 +44,8 @@ const cohort = computed(() => {
     ({ min:Math.min(a.min,b[key]), max:Math.max(a.max,b[key]) }), { min:Infinity,max:-Infinity })
   return result
 })
-const fraction = computed(() => Math.min(1,(lab.frame?.time ?? 0)/lab.displayDuration))
-const transportLabel = computed(() => lab.playing ? 'Pause' : lab.replay && fraction.value >= 1 ? 'Replay day' : 'Play')
+const fraction = computed(() => lab.dayEnded ? 1 : lab.displayDuration ? (lab.frame?.time ?? 0) / lab.displayDuration : 0)
+const transportLabel = computed(() => lab.playing ? 'Pause' : lab.replay && lab.dayEnded ? 'Replay day' : 'Play')
 const rateText = computed(() => Number((2**((lab.rate-6)/2)).toFixed(3))+'×')
 const events = computed(() => (lab.frame?.events ?? []).filter(e => e.time <= (lab.frame?.time ?? 0)))
 const creatureEvents = computed(() => events.value.filter(e => e.id===lab.selected || e.target===lab.selected && e.type==='prey' ||
@@ -63,7 +63,7 @@ const speedRange = computed(() => {
 })
 const quickLabel = computed(() => lab.batch && lab.batch.label !== 'Preparing' ? 'Progress' : 'Quick Sim')
 const replayCanSeek = computed(() => lab.replay && !lab.loading)
-const canAdvanceDay = computed(() => !!lab.frame && fraction.value < 1 && !lab.loading && (lab.replay || lab.canEnterLive))
+const canAdvanceDay = computed(() => !!lab.frame && !lab.dayEnded && !lab.loading && (lab.replay || lab.canEnterLive))
 function select(id) {
   lab.selected = id
   lab.following = id != null
@@ -193,7 +193,6 @@ defineExpose({ select, overhead })
         <div v-else><span>{{ format(speedRange.min) }}</span><span>{{ format(speedRange.max) }}</span></div>
       </div>
       <div v-if="lab.loading" class="stage-note" role="status">Building replay for Day {{ lab.replayDay }}…</div>
-      <div v-else-if="lab.frame && !living.length" class="stage-note"><strong>Extinction</strong><span>Day {{ lab.viewing }} · No living creatures</span></div>
       <span v-if="fallback" class="render-note" title="Canvas rendering is active">Canvas view</span>
       <div class="player">
         <button class="icon through" title="Play through generations" aria-label="Play through generations" :aria-pressed="lab.through" @click="lab.toggleThrough"><StepForward :size="20"/></button>
@@ -209,7 +208,7 @@ defineExpose({ select, overhead })
         </div>
       </div>
       <div class="player-actions">
-        <button class="secondary quick" @click="lab.modal=lab.batch ? 'quick-progress' : 'quick'"><FastForward :size="17" fill="currentColor"/>{{ quickLabel }}</button>
+        <button class="secondary quick" :disabled="!!lab.extinctDay && !lab.batch" @click="lab.modal=lab.batch ? 'quick-progress' : 'quick'"><FastForward :size="17" fill="currentColor"/>{{ quickLabel }}</button>
         <button class="icon" aria-label="Playback actions" title="Playback actions" @click="toggle('player')"><Ellipsis :size="20"/></button>
         <button class="icon" aria-label="Viewing speed" :title="'Viewing speed · '+rateText" :aria-expanded="tool==='rate'" @click="toggle('rate')"><Clock :size="21"/></button>
       </div>
@@ -257,14 +256,16 @@ defineExpose({ select, overhead })
         </template>
       </aside>
     </section>
-    <div class="time-rail" :class="{ seekable:replayCanSeek }" :style="{ '--elapsed':fraction*100+'%' }"
+    <div class="time-rail" :class="{ seekable:replayCanSeek, 'open-ended':lab.displayDuration == null }" :style="{ '--elapsed':fraction*100+'%' }"
       @mouseenter="rateReadout=true" @mouseleave="rateReadout=false">
-      <div v-if="rateReadout" class="time-label">{{ format(lab.frame?.time ?? 0) }} s / {{ format(lab.displayDuration) }} s</div>
+      <div v-if="rateReadout || lab.frame && lab.displayDuration == null" class="time-label">
+        {{ format(lab.frame?.time ?? 0) }} s {{ lab.displayDuration == null ? 'elapsed' : '/ '+format(lab.displayDuration)+' s' }}
+      </div>
       <div class="time-fill"></div><div class="time-thumb"></div>
       <input v-if="replayCanSeek" :value="lab.frame?.time ?? 0" type="range" min="0" :max="lab.displayDuration" step=".05"
-        aria-label="Replay time" :aria-valuetext="format(lab.frame?.time ?? 0)+' seconds of '+lab.displayDuration"
+        aria-label="Replay time" :aria-valuetext="format(lab.frame?.time ?? 0)+' seconds of '+format(lab.displayDuration)"
         @pointerdown="startSeek" @pointerup="finishSeek" @pointercancel="finishSeek" @input="lab.seek(Number($event.target.value))" @focus="rateReadout=true" @blur="rateReadout=false">
-      <span v-else role="progressbar" aria-label="Current day elapsed" :aria-valuenow="lab.frame?.time ?? 0" :aria-valuemax="lab.displayDuration"></span>
+      <span v-else-if="lab.displayDuration != null" role="progressbar" aria-label="Current day elapsed" :aria-valuenow="lab.frame?.time ?? 0" :aria-valuemax="lab.displayDuration"></span>
     </div>
     <Ribbon @reroll="emit('reroll')" @table="lab.modal='table'"/>
   </main>

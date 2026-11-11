@@ -18,12 +18,13 @@ const branchFood = computed({
 })
 const startProgress=ref(lab.completed), endProgress=ref(lab.completed), resumeLive=ref(false)
 const remaining=computed(()=>1000-lab.run.setup.days)
-const base=computed(()=>lab.liveFrame?.time>=lab.liveFrame?.duration ? lab.completed : Math.min(lab.completed+1,lab.run.setup.days))
+const base=computed(()=>lab.liveFrame?.duration!=null && lab.liveFrame.time>=lab.liveFrame.duration
+  ? lab.completed : Math.min(lab.completed+1,lab.run.setup.days))
 const finish=computed(()=>mode.value==='absolute'?target.value:base.value+amount.value)
 const scopeLabel=computed(()=>lab.run.setup.species.find(s=>s.id===lab.scope)?.name ?? 'All species')
 const rows=computed(()=>lab.run.summaries.map(s=>s.rows[lab.scope]).filter(Boolean))
 const matches=computed(()=>[...lab.library].sort((a,b)=>b.created-a.created).filter(r=>r.setup.name.toLowerCase().includes(search.value.toLowerCase())))
-const canSim=computed(()=>Number.isInteger(finish.value)&&finish.value>=1&&finish.value<=lab.run.setup.days&&
+const canSim=computed(()=>Number.isInteger(finish.value)&&finish.value>=1&&finish.value<=(lab.extinctDay ? lab.completed : lab.run.setup.days)&&
   (mode.value==='absolute'||Number.isInteger(amount.value)&&amount.value>=0))
 const canExportCsv = computed(() => Number.isInteger(start.value) && Number.isInteger(end.value) &&
   start.value >= 1 && start.value <= end.value && end.value <= lab.completed)
@@ -117,7 +118,7 @@ onMounted(()=>dialog.value.showModal())
 </script>
 <template>
   <dialog ref="dialog" class="task-dialog" :class="{'wide-dialog':['library','table'].includes(lab.modal)}" @cancel.prevent="close" aria-labelledby="dialog-title">
-    <header><h2 id="dialog-title">{{ titles[lab.modal] }}</h2><button class="icon" aria-label="Close dialog" @click="close"><CircleX :size="23"/></button></header>
+    <header><h2 id="dialog-title">{{ lab.modal==='quick-done' && lab.extinctDay ? 'Population extinct' : titles[lab.modal] }}</h2><button class="icon" aria-label="Close dialog" @click="close"><CircleX :size="23"/></button></header>
     <template v-if="lab.modal==='quick'">
       <p>Advance the active run without animation.</p>
       <div class="split-options"><button class="secondary" :aria-pressed="mode==='additional'" @click="mode='additional'">Additional generations</button>
@@ -128,7 +129,7 @@ onMounted(()=>dialog.value.showModal())
       <p v-if="finish>lab.run.setup.days" class="issue">The current limit is Day {{ lab.run.setup.days }}.</p>
       <p v-else-if="canSim" class="destination">{{ finish<=lab.completed?'Day '+finish+' is ready to watch.':finish===base?'Finish Day '+finish:'Finish Day '+base+', then complete Days '+(base+1)+'–'+finish }}</p>
       <footer><button class="secondary" @click="close">Cancel</button>
-        <button v-if="finish>lab.run.setup.days" class="primary" @click="lab.modal='extend'">More Generations</button>
+        <button v-if="finish>lab.run.setup.days && !lab.extinctDay" class="primary" @click="lab.modal='extend'">More Generations</button>
         <button v-else class="primary" :disabled="!canSim || finish>lab.completed && !lab.workerReady" @click="simulate"><FastForward v-if="finish>lab.completed" :size="16"/>{{ finish<=lab.completed?'Watch Day '+finish:'Simulate' }}</button>
       </footer>
     </template>
@@ -138,19 +139,21 @@ onMounted(()=>dialog.value.showModal())
         <dt v-if="lab.batch">Computing</dt><dd v-if="lab.batch">Day {{ lab.completed+1 }}</dd>
         <dt>Completed through</dt><dd>Day {{ lab.completed }}</dd><dt>Saved through</dt><dd>Day {{ lab.saved }}</dd></dl>
       <p v-if="lab.batch?.stopping" class="quiet">Stopping at the next day boundary.</p>
+      <p v-if="!lab.batch && lab.extinctDay" class="quiet">The last blobs died on Day {{ lab.extinctDay }}.</p>
       <footer><button class="secondary" @click="close">{{ lab.batch?'Hide progress':'Close' }}</button>
         <button v-if="lab.batch" class="primary" :disabled="lab.batch.stopping" @click="lab.stopBatch">Stop after this day</button>
         <template v-else>
           <button v-if="lab.canEnterLive" class="secondary" @click="lab.modal='quick'">New Quick Sim</button>
-          <button v-if="lab.completed" class="primary" @click="emit('watch',lab.completed)">Watch last day</button>
+          <button v-if="lab.completed" class="primary" @click="emit('watch',lab.completed, null, { atEnd:!!lab.extinctDay })">Watch last day</button>
         </template>
       </footer>
     </template>
     <template v-else-if="lab.modal==='extend'">
       <p>Add days to the existing run.</p><dl class="pair-readout"><dt>Current limit</dt><dd>Day {{ lab.run.setup.days }}</dd><dt>New limit</dt><dd>Day {{ lab.run.setup.days+(Number(extension)||0) }}</dd></dl>
       <label class="dialog-field">Additional days <input v-model.number="extension" type="number" min="1" :max="remaining"></label>
-      <p class="quiet">{{ remaining }} days available before Day 1,000.<template v-if="lab.batch"> Stop or finish the current job before extending.</template></p>
-      <footer><button class="secondary" @click="close">Cancel</button><button class="primary" :disabled="!lab.workerReady||!!lab.batch||!Number.isInteger(extension)||extension<1||extension>remaining" @click="lab.extend(lab.run.setup.days+extension)">Extend</button></footer>
+      <p v-if="lab.extinctDay" class="quiet">The population went extinct on Day {{ lab.extinctDay }}.</p>
+      <p v-else class="quiet">{{ remaining }} days available before Day 1,000.<template v-if="lab.batch"> Stop or finish the current job before extending.</template></p>
+      <footer><button class="secondary" @click="close">Cancel</button><button class="primary" :disabled="!lab.workerReady||!!lab.batch||!!lab.extinctDay||!Number.isInteger(extension)||extension<1||extension>remaining" @click="lab.extend(lab.run.setup.days+extension)">Extend</button></footer>
     </template>
     <template v-else-if="lab.modal==='download'">
       <div class="split-options"><button class="secondary" :aria-pressed="exportKind==='csv'" @click="exportKind='csv'">CSV results</button>

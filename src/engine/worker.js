@@ -20,13 +20,15 @@ function settle(result) {
 }
 
 function show() {
-  if (committed < config.days) emit('frame', { frame: snapshot(current()) })
+  if (canAdvance()) emit('frame', { frame: snapshot(current()) })
 }
+
+const canAdvance = () => committed < config.days && checkpoint.roster.length > 0
 
 async function batch(target) {
   busy = true
   stopped = false
-  while (committed < target && committed < config.days) {
+  while (committed < target && canAdvance()) {
     const state = current()
     const rules = rulesFor(config, records, state.day)
     let result
@@ -34,7 +36,9 @@ async function batch(target) {
       const started = performance.now()
       do {
         result = step(state, rules, 1, true)
-        if (!result && !state.blobs.some(b => b.alive && !b.home)) result = step(state, rules, state.limit, true)
+        if (!result && state.limit != null && !state.blobs.some(b => b.alive && !b.home)) {
+          result = step(state, rules, state.limit, true)
+        }
       } while (!result && performance.now() - started < 12)
       if (!result) await pause()
     } while (!result)
@@ -50,9 +54,8 @@ async function batch(target) {
 async function replay(message) {
   const { setup, start, day, records, id } = message
   let lastProgress = performance.now()
-  function advanceReplay(state, rules, ticks) {
-    const end = Math.min(state.limit, state.tick + ticks)
-    while (state.tick < end) {
+  function advanceReplay(state, rules, end) {
+    while (!state.settled && state.tick < end) {
       step(state, rules, Math.min(20, end - state.tick), true)
       const now = performance.now()
       if (now - lastProgress >= 1000) {
@@ -65,7 +68,7 @@ async function replay(message) {
   for (let i = start; i < day; i++) {
     const rules = rulesFor(setup, records, i)
     const ctx = dawn(rules, i, at)
-    advanceReplay(ctx, rules, ctx.limit)
+    advanceReplay(ctx, rules, Infinity)
     at = ctx.settled.checkpoint
     await pause()
   }
@@ -73,10 +76,13 @@ async function replay(message) {
   const startFrame = snapshot(state)
   const opening = structuredClone(startFrame.blobs)
   const plants = state.plants.map(p => ({ id: p.id, x: p.x, y: p.y }))
-  const fields = 7
-  const stride = Math.max(1, Math.ceil((state.limit + 1) * opening.length * fields * 4 / (16 * 1024 * 1024)))
-  const frames = new Float32Array((Math.ceil(state.limit / stride) + 1) * opening.length * fields)
+  const width = opening.length * 7
+  const maxSamples = Math.max(3, Math.floor(16 * 1024 * 1024 / (Math.max(1, width) * 4)))
+  let stride = state.limit == null ? 1 : Math.max(1, Math.ceil(state.limit / (maxSamples - 1)))
+  let capacity = Math.min(16, maxSamples)
+  let frames = new Float32Array(capacity * width)
   let index = 0
+  let samples = 0
   function sample() {
     for (const b of state.blobs) {
       frames[index++] = b.x
@@ -87,15 +93,32 @@ async function replay(message) {
       frames[index++] = b.state
       frames[index++] = b.preyCredits
     }
+    samples++
   }
   sample()
-  while (state.tick < state.limit) {
-    advanceReplay(state, rules, stride)
+  while (!state.settled) {
+    if (samples === capacity) {
+      if (capacity < maxSamples) {
+        capacity = Math.min(capacity * 2, maxSamples)
+        const expanded = new Float32Array(capacity * width)
+        expanded.set(frames)
+        frames = expanded
+      } else {
+        // Keep the replay evenly spaced when a generation outgrows the buffer.
+        for (let i = 2; i < samples; i += 2) frames.copyWithin(i / 2 * width, i * width, (i + 1) * width)
+        stride *= 2
+        samples = Math.ceil(samples / 2)
+        index = samples * width
+      }
+    }
+    advanceReplay(state, rules, (Math.floor(state.tick / stride) + 1) * stride)
     sample()
   }
-  postMessage({ type: 'track', id, track: { day, duration: state.limit * state.stepSeconds,
-    stepSeconds: state.stepSeconds, ticks: state.limit, stride,
-    opening, plants, frames, events: state.events, checkpoint: state.settled.checkpoint, final: snapshot(state) } }, [frames.buffer])
+  const final = snapshot(state)
+  const used = frames.slice(0, index)
+  postMessage({ type: 'track', id, track: { day, duration: final.duration,
+    stepSeconds: state.stepSeconds, ticks: state.tick, stride,
+    opening, plants, frames: used, events: state.events, checkpoint: state.settled.checkpoint, final } }, [used.buffer])
 }
 
 self.onmessage = async ({ data }) => {
@@ -112,7 +135,7 @@ self.onmessage = async ({ data }) => {
         emit('ready')
         break
       case 'advance': {
-        if (busy || committed >= config.days) return
+        if (busy || !canAdvance()) return
         const state = current()
         const result = step(state, rulesFor(config, records, state.day), data.ticks)
         if (result) settle(result)

@@ -26,7 +26,7 @@ const bounds = computed(() => {
 })
 const tiles = computed(() => {
   const limit = lab.run.setup.days
-  const visible = Math.min(limit,Math.max(lab.completed+8, lab.viewing+2))
+  const visible = lab.extinctDay ? lab.completed : Math.min(limit,Math.max(lab.completed+8, lab.viewing+2))
   return Array.from({length:visible},(_,i) => {
     const row = rows.value[i]
     return { day:i+1,row,values: row ? Object.fromEntries(METRICS.map(m => [m.key,metricValue(row,m.key)])) : null }
@@ -35,7 +35,7 @@ const tiles = computed(() => {
 const visibleFrame = computed(() => {
   const frame = lab.frame
   if (!frame) return {}
-  if (frame.time >= frame.duration && lab.run.summaries[frame.day-1]) {
+  if (lab.dayEnded && lab.run.summaries[frame.day-1]) {
     const row = lab.run.summaries[frame.day-1].rows[lab.scope]
     return Object.fromEntries(METRICS.map(m => [m.key,metricValue(row,m.key)]))
   }
@@ -155,7 +155,7 @@ function escapeDetail(event) {
     <div class="stats">
       <div class="stats-heading">
         <h2>Current Generation Stats</h2>
-        <span class="quiet stats-state">Day {{ lab.viewing }} · {{ lab.frame?.time >= lab.displayDuration ? 'Final' : lab.status }}</span>
+        <span class="quiet stats-state">Day {{ lab.viewing }} · {{ lab.dayEnded ? 'Final' : lab.status }}</span>
         <button class="icon compact stat-info" title="View generation table" aria-label="View generation table" @click="emit('table')"><Info :size="15"/></button>
         <select v-model="lab.scope" aria-label="Generation statistics species">
           <option value="all">All species</option>
@@ -174,7 +174,7 @@ function escapeDetail(event) {
       <div ref="scroll" class="ribbon-scroll" @wheel="wheel" @scroll.passive="anchorDetail">
         <div class="tile-track">
           <button v-for="tile in tiles" :key="tile.day" type="button" class="day-tile"
-            :class="{ current:lab.viewing===tile.day, pending:!tile.row }" :data-day="tile.day"
+            :class="{ current:lab.viewing===tile.day, pending:!tile.row, 'line-tile':mode==='line' }" :data-day="tile.day"
             :aria-current="lab.viewing===tile.day ? 'true' : undefined" :aria-label="'Day '+tile.day+(tile.row ? ', population '+tile.row.population : ', '+(tile.day===lab.liveDay && !lab.batch ? 'live' : 'pending'))"
             :tabindex="tile.day===focusDay ? 0 : -1" :aria-keyshortcuts="tile.row ? 'I Shift+F10' : undefined"
             @focus="focusDay=tile.day" @click="clickTile($event,tile)" @keydown="keys($event,tile.day)"
@@ -183,9 +183,18 @@ function escapeDetail(event) {
               :six="mode==='six'" :interactive="!!tile.row"/>
             <span class="day-number">{{ tile.day }}</span>
             <small v-if="!tile.row">{{ tile.day===lab.liveDay && !lab.batch ? 'Live' : 'Pending' }}</small>
-            <small v-else-if="tile.day===firstExtinct">Extinct</small>
+            <small v-else-if="!lab.extinctDay && tile.day===firstExtinct">Extinct</small>
           </button>
-          <button class="day-tile more-tile" aria-label="More Generations" @click="lab.modal='extend'"><Layers :size="25"/><span>More</span></button>
+          <button v-if="lab.extinctDay" class="day-tile extinction-tile" :aria-label="'Extinct on Day '+lab.extinctDay+' · Watch final scene'" @click="lab.openDay(lab.extinctDay, Infinity)">
+            <svg viewBox="0 0 64 64" class="extinction-icon" aria-hidden="true">
+              <circle cx="32" cy="32" r="31" fill="#0A0A0A" stroke="#5E5A51"/>
+              <path d="M16 31c0-5 4-6 6-12 2-5 5-8 11-8 8 0 11 6 12 12 1 4 4 4 4 8 0 5-6 7-17 7-9 0-16-2-16-7Z" fill="currentColor"/>
+              <path d="m25 24 4 4m0-4-4 4m11-4 4 4m0-4-4 4" stroke="#0A0A0A" stroke-width="1.4" stroke-linecap="round"/>
+              <path d="m22 42 20 10m0-10L22 52m-2-12 4 1m-4 12 4 1m16-13 4-1m-4 14 4-1" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+            </svg>
+            <span>Extinct</span><small>Day {{ lab.extinctDay }}</small>
+          </button>
+          <button v-else class="day-tile more-tile" aria-label="More Generations" @click="lab.modal='extend'"><Layers :size="25"/><span>More</span></button>
           <svg v-if="mode==='line'" class="ribbon-line" :viewBox="'0 0 '+tiles.length*100+' 65'"
             :style="{width:tiles.length*100+'px'}" preserveAspectRatio="none" aria-hidden="true">
             <path :d="miniSeries.path" :stroke="miniKey.color" fill="none" stroke-width="2"/>
@@ -204,14 +213,14 @@ function escapeDetail(event) {
       <button v-else class="icon legend-open" aria-label="Show generation legend" @click="legend=true"><ChevronRight :size="16"/></button>
       <div class="ribbon-actions">
         <button class="icon compact" title="Reroll seed" aria-label="Reroll seed" @click="emit('reroll')"><Dices :size="16"/></button>
-        <button class="icon compact" title="More Generations" aria-label="More Generations" @click="lab.modal='extend'"><Layers :size="16"/></button>
+        <button v-if="!lab.extinctDay" class="icon compact" title="More Generations" aria-label="More Generations" @click="lab.modal='extend'"><Layers :size="16"/></button>
         <button class="icon compact" title="Generation options" aria-label="Generation options" @click="options=!options"><Ellipsis :size="16"/></button>
         <button class="icon compact" title="Collapse generations" aria-label="Collapse generations" @click="fold=true"><ChevronDown :size="16"/></button>
       </div>
       <div v-if="options" class="pop ribbon-menu">
         <button v-for="[id,label] in [['classic','Walkthrough flower'],['six','All six metrics'],['line','Mini line']]" :key="id" @click="mode=id; rotation=0; options=false">{{ label }} <span v-if="mode===id">✓</span></button>
         <button @click="emit('table'); options=false">Numeric table</button>
-        <form @submit.prevent="select(dayInput); options=false"><label>Go to day <input v-model.number="dayInput" type="number" min="1" :max="lab.run.setup.days" required></label><button class="secondary">Go</button></form>
+        <form @submit.prevent="select(dayInput); options=false"><label>Go to day <input v-model.number="dayInput" type="number" min="1" :max="lab.extinctDay ? lab.completed : lab.run.setup.days" required></label><button class="secondary">Go</button></form>
       </div>
       <div v-if="inspection && rows[inspection-1]" ref="detail" class="pop ribbon-detail" role="region"
         :aria-label="'Day '+inspection+' readings'" :style="{ left: detailX == null ? undefined : detailX+'px' }">

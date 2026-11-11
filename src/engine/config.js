@@ -1,7 +1,8 @@
 export const TRAITS = ['speed', 'size', 'sense']
 export const PALETTE = ['#406780', '#F47E18', '#CE6591', '#80A653', '#9B7ACA', '#46A49D', '#D5A84C', '#C76052']
 export const LEGACY_RULE_VERSION = 1
-export const VERSION = 2
+export const VERSION = 3
+export const endsWhenSettled = config => config.version >= 3 && config.endMode === 'settled'
 
 export function speciesTemplate(id, name, color, count = 10, enabled = true) {
   return { id, name, color, count, enabled, energy: 500, speed: 10, size: 10, sense: 20,
@@ -11,7 +12,7 @@ export function speciesTemplate(id, name, color, count = 10, enabled = true) {
 
 export function starter() {
   return {
-    version: VERSION, name: 'Starter field', days: 50, duration: 100, seed: 18, food: 50,
+    version: VERSION, name: 'Starter field', days: 50, endMode: 'settled', duration: 100, seed: 18, food: 50,
     mode: 'prepare', predation: true, sameSpecies: true, stride: 'linked', metabolism: 'walkthrough',
     plantReward: 0, preyReward: 0, schedule: [], scheduleMode: 'constant',
     species: [speciesTemplate('blue', 'Blue', PALETTE[0], 50),
@@ -27,13 +28,16 @@ export function validate(config) {
       errors[key] = `${name} must be ${integer ? 'a whole number ' : ''}from ${min} to ${max}.`
     }
   }
-  if (!config || ![LEGACY_RULE_VERSION, VERSION].includes(config.version)) {
+  if (!config || ![LEGACY_RULE_VERSION, 2, VERSION].includes(config.version)) {
     return { setup: 'Choose a setup file with a supported rule version.' }
   }
   if (typeof config.name !== 'string' || !config.name.trim() || config.name.trim().length > 60) errors.name = 'Enter a run name with 1–60 characters.'
   number('days', 'Days', config.days, 10, 1000)
-  number('duration', 'Seconds per day', config.duration / 10, 1, 60, false)
-  if (!errors.duration && !Number.isInteger(config.duration)) errors.duration = 'Enter seconds in tenths.'
+  if (config.version === VERSION && !['settled', 'timed'].includes(config.endMode)) errors.endMode = 'Choose when each day ends.'
+  if (!endsWhenSettled(config)) {
+    number('duration', 'Seconds per day', config.duration / 10, 1, 60, false)
+    if (!errors.duration && !Number.isInteger(config.duration)) errors.duration = 'Enter seconds in tenths.'
+  }
   number('seed', 'Seed', config.seed, 1, 100)
   number('food', 'Starting plants', config.food, 10, 1000)
   number('plantReward', 'Plant reward', config.plantReward, 0, 1000)

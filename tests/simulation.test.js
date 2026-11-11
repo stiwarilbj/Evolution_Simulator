@@ -17,12 +17,12 @@ test('live, partially saved, headless, and replay execution agree for every comp
   for (let day = 1; day <= 15; day++) {
     const live = dawn(config, day, checkpoint)
     const batch = structuredClone(live)
-    for (let i = 0; i < 71; i++) step(live, config)
+    for (let i = 0; i < 17; i++) step(live, config)
     const resumed = structuredClone(live)
     let result
     while (!result) result = step(live, config)
-    assert.deepEqual(result, step(resumed, config, resumed.limit, true))
-    assert.deepEqual(result, step(batch, config, batch.limit, true))
+    assert.deepEqual(result, step(resumed, config, Infinity, true))
+    assert.deepEqual(result, step(batch, config, Infinity, true))
     assert.deepEqual(snapshot(live), snapshot(batch))
     const { rows } = result.summary
     const row = rows.all
@@ -169,7 +169,7 @@ test('the default charges the full video movement cost before a blob can eat', (
   Object.assign(exhausted, { x:200, y:200, angle:0, energy:10.002 })
   step(field, config)
   assert.equal(snapshot(field).time, 0.1)
-  assert.equal(snapshot(field).duration, 10)
+  assert.equal(snapshot(field).duration, null)
   assert.ok(Math.abs(Math.hypot(blob.x - 100, blob.y - 100) - 10) < 1e-10)
   assert.equal(blob.energy, 489.998)
   assert.equal(exhausted.alive, false)
@@ -178,16 +178,41 @@ test('the default charges the full video movement cost before a blob can eat', (
   assert.equal(field.plants[0].eaten, false)
 })
 
-test('an extinct run still records food and null trait statistics', () => {
+test('the final generation records all deaths, food and null living traits', () => {
   const config = starter()
-  const field = dawn(config, 50, { roster:[], nextId:51 })
-  const { summary } = step(field, config, field.limit, true)
-  assert.equal(summary.day, 50)
+  config.species[0].energy = 10
+  const field = dawn(config, 1, founders(config))
+  const { summary } = step(field, config, Infinity, true)
+  assert.equal(summary.day, 1)
+  assert.equal(snapshot(field).duration, 0.1)
   assert.equal(summary.rows.all.population, 0)
+  assert.equal(summary.rows.all.deaths, 50)
   assert.equal(summary.rows.all.food, 50)
   assert.equal(summary.rows.all.plantsLeft, 50)
   assert.equal(summary.rows.all.age.mean, null)
-  assert.equal(summary.rows.all.deathAge.mean, null)
+  assert.equal(summary.rows.all.deathAge.mean, 0)
+})
+
+test('settled days can go past the old deadline and end on the last active tick', () => {
+  const config = starter()
+  const field = dawn(config, 1, founders(config))
+  const [parent, lastActive] = field.blobs
+  field.blobs = [parent, lastActive]
+  field.opening = field.opening.slice(0, 2)
+  field.plants = []
+  Object.assign(parent, { home: true, credits: 2 })
+  Object.assign(lastActive, { energy: 102, moveCost: 1, rate: 10 })
+  assert.equal(step(field, config, 100), null)
+  assert.equal(snapshot(field).time, 10)
+  assert.equal(snapshot(field).duration, null)
+
+  const result = step(field, config, 100, true)
+  assert.equal(field.tick, 102)
+  assert.equal(snapshot(field).duration, 102 * field.stepSeconds)
+  assert.equal(result.summary.rows.all.population, 2)
+  assert.equal(result.summary.rows.all.births, 1)
+  assert.equal(field.events.find(e => e.type === 'birth').time, snapshot(field).duration)
+  assert.equal(step(field, config), result)
 })
 
 test('configuration bounds, food schedules, and quantiles use the documented definitions', () => {
@@ -240,7 +265,7 @@ test('CSV exports per-scope rows and distinguishes missing measurements from zer
 
 test('branch histories keep founding traits and apply new food and duration only after the fork', () => {
   const original = { ...starter(), version: LEGACY_RULE_VERSION, metabolism:'product' }
-  const branch = { ...original, version: starter().version, food:80, duration:200, metabolism:'walkthrough' }
+  const branch = { ...original, version: starter().version, endMode:'timed', food:80, duration:200, metabolism:'walkthrough' }
   const revisions = [{ day:1, setup:original }, { day:3, setup:branch }]
   assert.deepEqual(validate(original), {})
   assert.equal(validateRevisions(branch,revisions),true)
@@ -256,6 +281,6 @@ test('branch histories keep founding traits and apply new food and duration only
     summaries.push(result.summary)
   }
   const rows = csv({ id:'branch', setup:branch, revisions, summaries }, 'all').split('\r\n').slice(1)
-  assert.deepEqual(rows.map(row => row.split(',')[2]), ['"1"', '"1"', '"2"'])
+  assert.deepEqual(rows.map(row => row.split(',')[2]), ['"1"', '"1"', '"3"'])
   assert.equal(validateRevisions({ ...branch, seed:2 },revisions),false)
 })

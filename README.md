@@ -17,7 +17,7 @@ Open the link shown in your terminal.
 
 ## Try it
 
-- **World** plays a day. Click a blob to follow it, or use **Quick Sim** to skip ahead.
+- **World** plays a day. Click a blob to follow it, or use **Quick Sim** to skip ahead. If the last blob dies, click the extinction tile to watch the ending.
 - **Settings** lets you make species and set their traits, food, and the number of days.
 - **Trends** shows how the population and its traits change over time. Compare sight ranges or see how many blobs are each age.
 - **About → Experiments** lets you run two tests with the same seed and compare them.

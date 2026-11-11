@@ -152,6 +152,7 @@ dd{margin:0;font-family:var(--mono);color:var(--cream);text-align:right}
 .time-rail input{position:absolute;inset:-8px 0;width:100%;height:20px;margin:0;opacity:0;cursor:ew-resize}
 .time-rail:focus-within{outline:2px solid var(--focus);outline-offset:2px}
 .time-label{position:absolute;bottom:11px;left:clamp(48px,var(--elapsed),calc(100% - 49px));transform:translateX(-50%);padding:4px 8px;border-radius:4px;border:1px solid var(--line);background:#111;color:var(--cream);font:12px var(--mono);white-space:nowrap;pointer-events:none}
+.time-rail.open-ended .time-label{left:12px;transform:none}
 .dock{flex:none;background:var(--dock);--tile:100px}
 .stats{height:84px;padding:7px 24px 7px}
 .stats-heading{display:flex;align-items:center;gap:11px;min-height:29px;margin-bottom:1px}
@@ -171,12 +172,14 @@ dd{margin:0;font-family:var(--mono);color:var(--cream);text-align:right}
 .day-tile.current{color:var(--ink)}.day-tile.current::before{content:'';position:absolute;inset:6px 0 0;z-index:-1;background:var(--select);clip-path:polygon(50% 0,100% 9%,100% 100%,0 100%,0 9%)}
 .day-tile:hover::after{content:'';position:absolute;inset:8px 3px 2px;border:1px solid #62887c;border-radius:6px;pointer-events:none}
 .day-tile:focus-visible{outline-offset:-4px;z-index:1}
-.day-tile .flower{width:100%;height:auto;max-width:92px}
+.day-tile :is(.flower,.extinction-icon){width:100%;height:auto;max-width:92px}
 .day-number{margin-top:2px}.day-tile small{font-size:10px;color:var(--quiet);margin-top:3px}
 .day-tile.pending .flower{opacity:.55}.day-tile.pending.current .flower{opacity:.8}
 .more-tile{justify-content:center;gap:7px;color:var(--quiet)}
+.extinction-tile{color:var(--cream)}
+.extinction-tile>span{margin-top:2px}
 .ribbon-line{position:absolute;left:max(0px,calc(50vw - var(--tile)/2));top:22px;height:65px;z-index:1;pointer-events:none}
-.day-tile:has(~ .more-tile):not(:has(.flower)){padding-top:93px}
+.day-tile.line-tile{padding-top:93px}
 .flower-legend{position:absolute;inset:0 auto 0 0;width:184px;background:#080808;border-right:1px solid #33322d;padding:14px 14px 10px;z-index:2}
 .legend-key,.legend-help{min-height:24px;display:flex;align-items:center;gap:8px;color:var(--cream);font:12px var(--mono);padding:3px 3px;white-space:nowrap}
 .flower-legend.mini-line-legend{display:grid;grid-auto-rows:minmax(0,1fr);padding-block:3px}
@@ -426,12 +429,13 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
   .stat>span{font-size:12px;gap:4px;min-height:16px}.stat i{width:4px;height:9px}.stat strong{font-size:16px;padding-left:8px}
   .ribbon{height:130px}
   .day-tile{height:108px;padding:13px 13px 3px}.day-tile small{font-size:9px;margin-top:1px}
-  .day-tile .flower{max-width:63px}.day-tile.current::before{inset:4px 10px 1px}
+  .day-tile :is(.flower,.extinction-icon){max-width:63px}.day-tile.current::before{inset:4px 10px 1px}
+  .extinction-tile{justify-content:flex-end;padding-bottom:0}.extinction-tile .extinction-icon{max-width:38px}
   .ribbon-actions{right:5px;top:4px}.ribbon-actions .icon{width:26px;min-height:24px;height:24px}.ribbon-actions svg{width:13px}
   .ribbon-label{font-size:10px;bottom:7px}
   .flower-legend{width:136px;padding:5px 7px}.legend-key,.legend-help{font-size:10px;min-height:18px;gap:5px}.legend-key i{height:9px;width:9px}
   .legend-open{top:35px;width:25px;height:38px}
-  .ribbon-line{top:15px;height:48px}.day-tile:has(~ .more-tile):not(:has(.flower)){padding-top:67px}
+  .ribbon-line{top:15px;height:48px}.day-tile.line-tile{padding-top:67px}
   #main-surface.reading-surface{margin-top:120px}
   .trends,.compare-page,.about{padding:0 12px 32px}
   .trend-filters,.trend-actions{gap:5px}
@@ -506,16 +510,17 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
   .stats{height:auto;padding-block:5px}
   .ribbon{height:106px}
   .day-tile{height:88px;padding-top:8px}
-  .day-tile .flower{max-width:50px}
+  .day-tile :is(.flower,.extinction-icon){max-width:50px}
   .ribbon-label{bottom:5px;font-size:10px}
   .ribbon-line{top:10px;height:42px}
-  .day-tile:has(~ .more-tile):not(:has(.flower)){padding-top:55px}
+  .day-tile.line-tile{padding-top:55px}
   .flower-legend{padding-block:3px}
   .legend-key,.legend-help{min-height:14px;padding-block:1px;font-size:10px}
   .legend-key i{width:9px;height:9px}
   .legend-open{top:32px}
 }
 @media(max-height:640px) and (max-width:700px){
+  .extinction-tile{height:94px}.extinction-tile .extinction-icon{max-width:25px}
   .run-center{top:40px;display:flex;align-items:center;gap:6px;width:max-content}
   .run-menu{top:38px}
   #main-surface.reading-surface{margin-top:94px}
