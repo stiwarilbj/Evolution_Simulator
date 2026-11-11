@@ -25,8 +25,14 @@ function move(event) {
   if(event.key===' ' && active.value) { event.preventDefault(); emit('pin',active.value); return }
   if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return
   event.preventDefault()
-  const index=Math.max(0,props.rows.findIndex(r=>r.day===active.value))
-  const next=event.key==='Home'?0:event.key==='End'?props.rows.length-1:Math.min(props.rows.length-1,Math.max(0,index+(event.key==='ArrowRight'?1:-1)))
+  const index = props.rows.findIndex(row => row.day === active.value)
+  const last = props.rows.length - 1
+  let next = 0
+  if (event.key === 'End') next = last
+  else if (event.key !== 'Home' && index >= 0) {
+    const step = event.key === 'ArrowRight' ? 1 : -1
+    next = Math.max(0, Math.min(last, index + step))
+  }
   const day=props.rows[next].day
   hovered.value=day
   emit('pin',day)
