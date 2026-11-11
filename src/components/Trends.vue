@@ -93,7 +93,8 @@ function jump(event) {
   const chart=options.value[event.target.value]
   if(chart) {
     if(hidden.value.includes(chart.id)) toggleHidden(chart.id)
-    requestAnimationFrame(()=>document.getElementById('chart-'+chart.title.toLowerCase().replaceAll(' ','-'))?.scrollIntoView({behavior:'smooth',block:'start'}))
+    const targetId = chart.id === 'overview' ? 'trends-overview' : 'chart-'+chart.title.toLowerCase().replaceAll(' ','-')
+    requestAnimationFrame(() => document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
   event.target.value=''
 }
@@ -174,7 +175,7 @@ watch(focused, async key=>{
             :legend="key==='population' && options[key].legend" :rows="rows" :pin="pin" :scope="scopeName" :annotations="annotations"
             @hide="toggleHidden(key)" @focus="focus(key)" @pin="pin=$event" @watch="emit('watch',$event)" @range="customRange"/>
         </div>
-        <section v-else-if="section==='overview'" class="overview">
+        <section v-else-if="section==='overview'" id="trends-overview" class="overview">
           <button class="secondary overview-mode" :aria-pressed="separate" @click="separate=!separate">{{ separate?'Combined scales':'Separate scales' }}</button>
           <div v-if="separate" class="compact-plots">
             <TrendPlot v-for="key in [...basic,'deathAge'].filter(key=>!hidden.includes(key))" :key="key" v-bind="{...options[key],series:options[key].series.filter(s=>s.label==='Mean'||s.label==='Closing population'),hideable:false}"

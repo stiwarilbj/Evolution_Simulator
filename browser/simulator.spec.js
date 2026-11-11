@@ -506,6 +506,37 @@ test('downloaded chart PNG keeps the chart readable on a light page', async ({ p
   expect(result).toEqual({ ...source, background: [36, 36, 36, 255], hasLightMarks: true })
 })
 
+test('Jump to chart reaches Overview with separate or combined scales', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await openSimulator(page)
+  await startRun(page)
+  await quickThrough(page, 3)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('link', { name: 'Trends', exact: true }).click()
+
+  const jump = page.getByLabel('Jump to chart')
+  const separate = page.getByRole('button', { name: 'Separate scales' })
+  const combined = page.getByRole('button', { name: 'Combined scales' })
+  const surface = page.locator('#main-surface')
+  const overviewOffset = () => page.locator('.trends .overview').evaluate(section =>
+    section.getBoundingClientRect().top - section.closest('#main-surface').getBoundingClientRect().top)
+
+  await separate.click()
+  await expect(combined).toBeVisible()
+  await surface.evaluate(element => element.scrollTo(0, 0))
+  await expect.poll(overviewOffset).toBeGreaterThan(100)
+  await jump.selectOption({ label: 'Overview' })
+  await expect.poll(async () => Math.abs(await overviewOffset())).toBeLessThan(2)
+
+  await combined.click()
+  await expect(separate).toBeVisible()
+  await surface.evaluate(element => element.scrollTo(0, 0))
+  await expect.poll(overviewOffset).toBeGreaterThan(100)
+  await jump.selectOption({ label: 'Overview' })
+  await expect.poll(async () => Math.abs(await overviewOffset())).toBeLessThan(2)
+})
+
 test('Trends chart actions stay inside the selected day range', async ({ page }) => {
   await openSimulator(page)
   await startRun(page)

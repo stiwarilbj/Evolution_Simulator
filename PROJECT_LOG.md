@@ -40,3 +40,4 @@
 - Fixed Mini line so the generation chart can show Population and Age at Death.
 - Fixed the World view so it keeps drawing in Canvas when WebGL disconnects during a run.
 - Kept the dark background in chart PNG downloads so the light lines and labels stay readable.
+- Fixed Jump to chart so it scrolls to Overview with both separate and combined scales.
