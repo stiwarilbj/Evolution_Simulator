@@ -30,7 +30,7 @@ export function validate(config) {
   if (typeof config.name !== 'string' || !config.name.trim() || config.name.trim().length > 60) errors.name = 'Enter a run name with 1–60 characters.'
   number('days', 'Days', config.days, 10, 1000)
   number('duration', 'Seconds per day', config.duration / 10, 1, 60, false)
-  if (!Number.isInteger(config.duration)) errors.duration = 'Enter seconds in tenths.'
+  if (!errors.duration && !Number.isInteger(config.duration)) errors.duration = 'Enter seconds in tenths.'
   number('seed', 'Seed', config.seed, 1, 100)
   number('food', 'Starting plants', config.food, 10, 1000)
   number('plantReward', 'Plant reward', config.plantReward, 0, 1000)

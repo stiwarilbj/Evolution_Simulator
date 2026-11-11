@@ -462,6 +462,33 @@ test('Constant food settings can start after shortening a scheduled run', async 
   await expect(page.getByRole('button', { name: 'Run options' })).toHaveText('Day 1 / 10 · Ready')
 })
 
+test('Settings rejects invalid day lengths instead of rounding them', async ({ page }) => {
+  await openSimulator(page)
+  await page.getByRole('button', { name: 'Simulation Settings' }).click()
+  const settings = page.getByRole('dialog', { name: 'Simulation Settings' })
+  const seconds = settings.getByRole('spinbutton', { name: 'Seconds per day', exact: true })
+  const evolve = settings.getByRole('button', { name: 'Evolve!' })
+  await settings.getByRole('spinbutton', { name: 'Days to run' }).fill('10')
+  await settings.getByRole('button', { name: /^Watch live/ }).click()
+
+  for (const [value, error] of [
+    ['10.04', 'Enter seconds in tenths.'],
+    ['0.99', 'Seconds per day must be from 1 to 60.'],
+    ['60.04', 'Seconds per day must be from 1 to 60.'],
+  ]) {
+    await seconds.fill(value)
+    await evolve.click()
+    await expect(seconds).toHaveAccessibleDescription(error)
+    await expect(seconds).toHaveValue(value)
+  }
+
+  await seconds.fill('10.3')
+  await evolve.click()
+  await expect(settings).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Run options' })).toHaveText('Day 1 / 10 · Ready')
+  await expect(page.getByRole('progressbar', { name: 'Current day elapsed' })).toHaveAttribute('aria-valuemax', '10.3')
+})
+
 test('discarding a settings draft clears its species removal undo', async ({ page }) => {
   await openSimulator(page)
   await page.getByRole('button', { name: 'Simulation Settings' }).click()

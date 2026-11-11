@@ -1,4 +1,4 @@
-[Play the Evolution Simulator](https://stiwarilbj.github.io/Jeopardy_Trainer/)
+[Play the Evolution Simulator](https://stiwarilbj.github.io/Evolution_Simulator/)
 
 # Evolution Simulator
 

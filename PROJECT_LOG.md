@@ -30,3 +30,8 @@
 - Fixed Trends so chart shortcuts and the pinned summary respect the selected day range. A pin appears again when its day is back in view.
 - Switching runs during Quick Sim now lets the current day finish so its results are saved with the old run.
 - Discarding settings edits now restores the setup the draft started from, including copies of saved runs and imported setups.
+
+## 2026-11-11
+
+- Fixed Seconds per day so Settings reports values outside 1–60 seconds and requires steps of one tenth of a second.
+- Updated the README link and browser test path for the renamed GitHub Pages site.

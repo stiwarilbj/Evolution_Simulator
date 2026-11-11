@@ -25,8 +25,10 @@ const mutationProfile = computed({
     }
   },
 })
-const seconds = computed({ get:()=>draft.duration==='' ? '' : draft.duration/10,
-  set:value=>{ draft.duration=value==='' ? '' : Math.round(value*10) } })
+const seconds = computed({
+  get: () => draft.duration === '' ? '' : draft.duration / 10,
+  set: value => { draft.duration = value === '' ? '' : value * 10 },
+})
 const total = computed(() => draft.species.filter(s=>s.enabled).reduce((sum,s)=>sum+(Number(s.count)||0),0))
 const endurance = computed(() => selected.value.energy/cost(selected.value,draft))
 const swatches = { speed:'#9A5A57',size:'#44877C',sense:'#468298' }
