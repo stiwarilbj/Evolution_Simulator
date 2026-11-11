@@ -8,9 +8,14 @@ import { csv, download, setupLink } from '../export.js'
 
 const lab=useLab()
 const emit=defineEmits(['compare','watch','world','resume','results'])
-const dialog=ref(), mode=ref('additional'), amount=ref(0), target=ref(1), extension=ref(25), branchFood=ref(lab.run.setup.food)
+const dialog=ref(), mode=ref('additional'), amount=ref(0), target=ref(1), extension=ref(25)
 const message=ref(''), search=ref(''), file=ref(), removeId=ref(null), renameId=ref(null), newName=ref('')
 const end=ref(lab.completed), start=ref(1), exportScope=ref(lab.scope), exportKind=ref('csv'), branchDay=ref(Math.max(1,Math.min(lab.viewing,lab.latestBranchDay)))
+const branchFoodOverride = ref(null)
+const branchFood = computed({
+  get: () => branchFoodOverride.value ?? lab.run.summaries[branchDay.value - 1]?.rows.all.food ?? lab.run.setup.food,
+  set: value => { branchFoodOverride.value = value },
+})
 const startProgress=ref(lab.completed), endProgress=ref(lab.completed), resumeLive=ref(false)
 const remaining=computed(()=>1000-lab.run.setup.days)
 const base=computed(()=>lab.liveFrame?.time>=lab.liveFrame?.duration ? lab.completed : Math.min(lab.completed+1,lab.run.setup.days))

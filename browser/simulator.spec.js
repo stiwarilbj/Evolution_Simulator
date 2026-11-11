@@ -390,6 +390,43 @@ test('a food-only branch keeps the day length at the fork', async ({ page }) => 
   await expect(page.locator('.trend-annotations span')).toHaveText([/Day 3 · Branch · 70 plants/])
 })
 
+test('a branch defaults to the plant supply recorded on the selected day', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page, '10', async () => {
+    await page.getByLabel('Food schedule').selectOption('step')
+    await addFoodPoint(page, 3, 25)
+    await addFoodPoint(page, 5, 70)
+  })
+  await quickThrough(page, 5)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 5')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+
+  const run = page.getByRole('button', { name: 'Run options' })
+  const branch = page.getByRole('button', { name: 'Branch here', exact: true })
+  const day = page.getByLabel('Branch after day')
+  const plants = page.getByLabel('Plants per day')
+  await run.click()
+  await branch.click()
+  await expect(day).toHaveValue('5')
+  await expect(plants).toHaveValue('70')
+  await day.fill('4')
+  await expect(plants).toHaveValue('25')
+  await plants.fill('85')
+  await day.fill('2')
+  await expect(plants).toHaveValue('85')
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+
+  await run.click()
+  await branch.click()
+  await day.fill('4')
+  await expect(plants).toHaveValue('25')
+  await page.getByRole('button', { name: 'Create branch', exact: true }).click()
+  await expect(run).toHaveText('Day 5 / 10 · Ready')
+  await page.getByRole('button', { name: 'View options' }).click()
+  await page.getByRole('checkbox', { name: 'HUD' }).check()
+  await expect(page.locator('.world-hud')).toContainText('Plants left 25')
+})
+
 test('earlier completed days can be branched from the run limit', async ({ page }) => {
   await openSimulator(page)
   await startRun(page)
