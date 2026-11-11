@@ -45,3 +45,4 @@
 - Fixed playback actions that stayed enabled at the end of a live or recorded day.
 - Fixed Compare so the old boards disappear while a different day's replay loads or fails.
 - Fixed Branch here to start with the selected day's plant count and keep any amount you type.
+- Fixed Mini line so each recorded reading shows a dot, even when only one day has results.

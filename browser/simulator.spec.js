@@ -222,6 +222,29 @@ test('World continues drawing live playback after losing WebGL', async ({ page }
   expect(errors).toEqual([])
 })
 
+test('Mini line shows a point as soon as the first day is completed', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page)
+  await quickThrough(page, 1)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('button', { name: 'Generation options' }).click()
+  await page.getByRole('button', { name: 'Mini line', exact: true }).click()
+  await page.locator('.flower-legend').getByRole('button', { name: 'Population', exact: true }).click()
+
+  const chart = page.locator('.ribbon-line')
+  await expect(chart.locator('path')).toHaveAttribute('d', /^\s*M[^L]*$/)
+  await expect(chart.locator('circle')).toHaveCount(1)
+  await expect(chart.locator('circle')).toBeVisible()
+  await expect(chart.locator('circle')).toHaveAttribute('cx', '50')
+
+  await quickThrough(page, 3)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await expect(chart.locator('circle')).toHaveCount(3)
+  await expect(chart.locator('path')).toHaveAttribute('d', /M.*L.*L/)
+})
+
 test('Mini line points stay above their generation tiles when the window shrinks', async ({ page }) => {
   await openSimulator(page)
   await startRun(page)

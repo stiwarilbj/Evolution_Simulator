@@ -175,7 +175,7 @@ dd{margin:0;font-family:var(--mono);color:var(--cream);text-align:right}
 .day-number{margin-top:2px}.day-tile small{font-size:10px;color:var(--quiet);margin-top:3px}
 .day-tile.pending .flower{opacity:.55}.day-tile.pending.current .flower{opacity:.8}
 .more-tile{justify-content:center;gap:7px;color:var(--quiet)}
-.ribbon-line{position:absolute;left:max(0px,calc(50vw - var(--tile)/2));top:22px;height:65px;pointer-events:none}
+.ribbon-line{position:absolute;left:max(0px,calc(50vw - var(--tile)/2));top:22px;height:65px;z-index:1;pointer-events:none}
 .day-tile:has(~ .more-tile):not(:has(.flower)){padding-top:93px}
 .flower-legend{position:absolute;inset:0 auto 0 0;width:184px;background:#080808;border-right:1px solid #33322d;padding:14px 14px 10px;z-index:2}
 .legend-key,.legend-help{min-height:24px;display:flex;align-items:center;gap:8px;color:var(--cream);font:12px var(--mono);padding:3px 3px;white-space:nowrap}

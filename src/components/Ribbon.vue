@@ -47,16 +47,21 @@ const visibleFrame = computed(() => {
     speed:average(living,'speed'),size:average(living,'size'),sense:average(living,'sense') }
 })
 const miniKey = computed(() => METRICS[order.value[rotation.value] ?? 1])
-const miniPath = computed(() => {
-  const { max } = bounds.value[miniKey.value.key]
-  let previous = false
-  return tiles.value.map((tile,i) => {
-    const value = tile.values?.[miniKey.value.key]
-    if (value == null) { previous = false; return '' }
-    const d = (previous ? ' L' : ' M') + (i*100+50) + ' ' + (58 - value/(max || 1)*50)
-    previous = true
-    return d
-  }).join('')
+const miniSeries = computed(() => {
+  const { key } = miniKey.value
+  const scale = bounds.value[key].max || 1
+  const points = []
+  let path = ''
+  for (const tile of tiles.value) {
+    const value = tile.values?.[key]
+    if (value == null) continue
+    const x = (tile.day - .5) * 100
+    const y = 58 - value / scale * 50
+    const command = points.at(-1)?.day === tile.day - 1 ? 'L' : 'M'
+    path += ` ${command}${x} ${y}`
+    points.push({ day: tile.day, x, y })
+  }
+  return { path, points }
 })
 const firstExtinct = computed(() => rows.value.find(row => row?.population === 0)?.day)
 function center(smooth, day = lab.viewing) {
@@ -168,10 +173,6 @@ function escapeDetail(event) {
     <div v-if="!fold" class="ribbon" @keydown.esc="escapeDetail">
       <div ref="scroll" class="ribbon-scroll" @wheel="wheel" @scroll.passive="anchorDetail">
         <div class="tile-track">
-          <svg v-if="mode==='line'" class="ribbon-line" :viewBox="'0 0 '+tiles.length*100+' 65'"
-            :style="{width:tiles.length*100+'px'}" preserveAspectRatio="none" aria-hidden="true">
-            <path :d="miniPath" :stroke="miniKey.color" fill="none" stroke-width="2"/>
-          </svg>
           <button v-for="tile in tiles" :key="tile.day" type="button" class="day-tile"
             :class="{ current:lab.viewing===tile.day, pending:!tile.row }" :data-day="tile.day"
             :aria-current="lab.viewing===tile.day ? 'true' : undefined" :aria-label="'Day '+tile.day+(tile.row ? ', population '+tile.row.population : ', '+(tile.day===lab.liveDay && !lab.batch ? 'live' : 'pending'))"
@@ -185,6 +186,11 @@ function escapeDetail(event) {
             <small v-else-if="tile.day===firstExtinct">Extinct</small>
           </button>
           <button class="day-tile more-tile" aria-label="More Generations" @click="lab.modal='extend'"><Layers :size="25"/><span>More</span></button>
+          <svg v-if="mode==='line'" class="ribbon-line" :viewBox="'0 0 '+tiles.length*100+' 65'"
+            :style="{width:tiles.length*100+'px'}" preserveAspectRatio="none" aria-hidden="true">
+            <path :d="miniSeries.path" :stroke="miniKey.color" fill="none" stroke-width="2"/>
+            <circle v-for="point in miniSeries.points" :key="point.day" :cx="point.x" :cy="point.y" r="3" :fill="miniKey.color"/>
+          </svg>
         </div>
       </div>
       <div v-if="legend" class="flower-legend" :class="{ 'mini-line-legend':mode==='line' }">
