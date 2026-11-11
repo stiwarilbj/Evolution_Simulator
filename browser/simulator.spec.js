@@ -466,6 +466,46 @@ test('Trends downloads the filtered days and checks that CSV bounds are whole da
   expect(data.map(row => [row[dayIndex], row[scopeIndex]])).toEqual([['2', 'blue'], ['3', 'blue']])
 })
 
+test('downloaded chart PNG keeps the chart readable on a light page', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page)
+  await quickThrough(page, 3)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('link', { name: 'Trends', exact: true }).click()
+  await page.getByRole('button', { name: 'Focus Population', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Focused chart' })
+  const chart = dialog.locator('canvas')
+  await expect.poll(() => chart.evaluate(canvas => canvas.width)).toBeGreaterThan(0)
+  const source = await chart.evaluate(canvas => ({ width: canvas.width, height: canvas.height }))
+  const pendingDownload = page.waitForEvent('download')
+  await dialog.getByRole('button', { name: 'Download chart PNG', exact: true }).click()
+  const file = await pendingDownload
+  expect(file.suggestedFilename()).toBe('population.png')
+
+  const png = await readFile(await file.path())
+  const result = await page.evaluate(async encoded => {
+    const bytes = Uint8Array.from(atob(encoded), char => char.charCodeAt(0))
+    const image = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
+    const canvas = document.createElement('canvas')
+    canvas.width = image.width
+    canvas.height = image.height
+    const context = canvas.getContext('2d')
+    context.drawImage(image, 0, 0)
+    image.close()
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
+    const hasLightMarks = pixels.some((value, index) =>
+      index % 4 === 0 && value > 200 && pixels[index + 1] > 200 && pixels[index + 2] > 180)
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      background: [...pixels.slice(0, 4)],
+      hasLightMarks,
+    }
+  }, png.toString('base64'))
+  expect(result).toEqual({ ...source, background: [36, 36, 36, 255], hasLightMarks: true })
+})
+
 test('Trends chart actions stay inside the selected day range', async ({ page }) => {
   await openSimulator(page)
   await startRun(page)

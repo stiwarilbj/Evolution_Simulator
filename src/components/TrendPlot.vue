@@ -165,11 +165,21 @@ onMounted(create)
 onBeforeUnmount(()=>chart?.destroy())
 watch(()=>[props.rows,props.series,props.right,props.guide,hidden.value],update)
 watch(()=>[props.pin,props.annotations],()=>chart?.draw())
-function image() {
-  const a=document.createElement('a')
-  a.download=props.title.toLowerCase().replaceAll(' ','-')+'.png'
-  a.href=chart.toBase64Image()
-  a.click()
+function downloadChart() {
+  const source = canvas.value
+  const image = document.createElement('canvas')
+  image.width = source.width
+  image.height = source.height
+  const context = image.getContext('2d')
+  if (!context) return
+  context.fillStyle = getComputedStyle(source).getPropertyValue('--stage').trim()
+  context.fillRect(0, 0, image.width, image.height)
+  context.drawImage(source, 0, 0)
+
+  const link = document.createElement('a')
+  link.download = props.title.toLowerCase().replaceAll(' ', '-') + '.png'
+  link.href = image.toDataURL('image/png')
+  link.click()
 }
 </script>
 <template>
@@ -195,7 +205,7 @@ function image() {
     </div>
     <div v-if="focus" class="focused-actions">
       <button class="secondary" :disabled="!active" @click="emit('pin',active)">Pin day</button>
-      <button class="secondary" @click="image">Download chart PNG</button>
+      <button class="secondary" @click="downloadChart">Download chart PNG</button>
     </div>
   </article>
 </template>
