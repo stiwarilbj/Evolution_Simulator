@@ -47,3 +47,4 @@
 - Fixed Branch here to start with the selected day's plant count and keep any amount you type.
 - Fixed Mini line so each recorded reading shows a dot, even when only one day has results.
 - Fixed Trends keyboard controls so the first arrow press selects the first visible day when no visible day is selected.
+- Fixed Trait Space so a chart with one trait value centers the average line and shows the value once.

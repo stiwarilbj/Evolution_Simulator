@@ -856,6 +856,43 @@ test('Trait Space keeps selections within the species filter and only loads whol
   expect(errors).toEqual([])
 })
 
+test('Trait Space centers the mean over a histogram with one trait value', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page, '10', async () => {
+    await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('400')
+    await page.getByLabel('Allow sense mutation').uncheck()
+    await page.getByRole('button', { name: /^Orange/ }).click()
+    await page.getByLabel('Enabled', { exact: true }).check()
+    await page.getByRole('spinbutton', { name: 'Sense Range', exact: true }).fill('30')
+    await page.getByRole('spinbutton', { name: 'Energy', exact: true }).fill('1000')
+    await page.getByLabel('Allow sense mutation').uncheck()
+  })
+  await quickThrough(page, 1)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('link', { name: 'Trends', exact: true }).click()
+  const species = page.getByLabel('Filter By Species')
+  await species.selectOption('blue')
+  await page.getByRole('button', { name: 'Trait Space', exact: true }).click()
+  const traitSpace = page.locator('.trait-space')
+  await traitSpace.getByRole('combobox', { name: 'Trait', exact: true }).selectOption('sense')
+
+  const histogram = traitSpace.getByLabel('Trait histogram')
+  const mean = histogram.locator('line[stroke-dasharray]')
+  const axisLabels = histogram.locator('text')
+  await expect(histogram.locator('rect')).toHaveCount(1)
+  await expect(mean).toHaveAttribute('x1', '380')
+  await expect(mean).toHaveAttribute('x2', '380')
+  await expect(axisLabels).toHaveText(['20.00'])
+  await expect(axisLabels.first()).toHaveAttribute('x', '380')
+
+  await species.selectOption('all')
+  await expect(axisLabels).toHaveText(['20.00', '30.00'])
+  const position = Number(await mean.getAttribute('x1'))
+  expect(position).toBeGreaterThan(30)
+  expect(position).toBeLessThan(730)
+})
+
 test('Trait Space can retry a failed day without changing the selected day', async ({ page }) => {
   await delayReplays(page)
   await openSimulator(page)

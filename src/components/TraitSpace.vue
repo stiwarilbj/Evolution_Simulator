@@ -69,6 +69,13 @@ const histogram=computed(()=>{
   return {bars,min,max,peak:Math.max(1,...bars.flat()),a:a.length,b:b.length,
     mean:a.length?a.reduce((total,n)=>total+n/a.length,0):null}
 })
+const histogramCenter = 380
+const singleValue = computed(() => histogram.value.min === histogram.value.max)
+const meanX = computed(() => {
+  const { mean, min, max } = histogram.value
+  if (mean == null) return null
+  return singleValue.value ? histogramCenter : 30 + 700 * (mean - min) / (max - min)
+})
 function down(event){gesture={x:event.clientX,y:event.clientY};event.currentTarget.setPointerCapture?.(event.pointerId)}
 function move(event){if(!gesture)return;angle.value+=(event.clientX-gesture.x)*.012;tilt.value=Math.min(1.28,Math.max(-.8,tilt.value+(event.clientY-gesture.y)*.008));gesture={x:event.clientX,y:event.clientY}}
 function watchCreature(){
@@ -118,8 +125,9 @@ function watchCreature(){
         <rect :x="4" :y="135-105*a/histogram.peak" :width="(700/histogram.bars.length-8)/(histogram.b?2:1)" :height="105*a/histogram.peak" fill="#83B3CE"><title>Day {{ day }} · {{ format(a,percent?1:0) }}</title></rect>
         <rect v-if="histogram.b" :x="700/histogram.bars.length/2" :y="135-105*b/histogram.peak" :width="(700/histogram.bars.length-8)/2" :height="105*b/histogram.peak" fill="#F6AD73"><title>Day {{ compare }} · {{ format(b,percent?1:0) }}</title></rect>
       </g>
-      <line v-if="histogram.mean!=null" :x1="30+700*(histogram.mean-histogram.min)/(histogram.max-histogram.min || 1)" :x2="30+700*(histogram.mean-histogram.min)/(histogram.max-histogram.min || 1)" y1="21" y2="135" stroke="#FFFDFC" stroke-dasharray="4 3"/>
-      <text x="30" y="156" fill="#BDBAB0">{{ format(histogram.min) }}</text><text x="730" y="156" fill="#BDBAB0" text-anchor="end">{{ format(histogram.max) }}</text>
+      <line v-if="meanX != null" :x1="meanX" :x2="meanX" y1="21" y2="135" stroke="#FFFDFC" stroke-dasharray="4 3"/>
+      <text :x="singleValue ? histogramCenter : 30" y="156" fill="#BDBAB0" :text-anchor="singleValue ? 'middle' : 'start'">{{ format(histogram.min) }}</text>
+      <text v-if="!singleValue" x="730" y="156" fill="#BDBAB0" text-anchor="end">{{ format(histogram.max) }}</text>
     </svg>
     <p v-if="histogram.a" class="quiet">Day {{ day }} · {{ histogram.a }} samples · Mean {{ format(histogram.mean) }}</p>
   </section>
