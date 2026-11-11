@@ -375,6 +375,7 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
 .paired-experiment p{margin-block:6px 12px}
 .paired-experiment label,.comparison-events,.pair-progress{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
 .paired-experiment label{color:var(--muted)}
+.paired-experiment input[type=number]{width:116px}
 .pair-progress progress{width:min(210px,100%);accent-color:var(--rail)}
 .comparison-events{margin-bottom:12px}
 .run-left{--run-color:#83b3ce}.run-right{--run-color:#f6ad73}
@@ -530,6 +531,7 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
   .transport .play{width:36px}
   .render-note{bottom:53px}
 }
+.number-shell:has(#seed){grid-template-columns:minmax(75px,1fr) minmax(48px,1fr) 116px}
 @media(max-height:640px) and (max-width:369px){
   .player{left:5px}
   .player .through{width:24px}

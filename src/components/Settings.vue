@@ -2,13 +2,16 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { BatteryMedium, CircleX, Copy, Dices, Leaf, Plus, Check, Trash2 } from 'lucide-vue-next'
 import { useLab } from '../store.js'
-import { endsWhenSettled, LEGACY_RULE_VERSION, PALETTE, TRAITS, VERSION, randomSeed, speciesTemplate, validate } from '../engine/config.js'
+import { endsWhenSettled, LEGACY_RULE_VERSION, MAX_SEED, PALETTE, SETTLED_RULE_VERSION, TRAITS,
+  randomSeed, speciesTemplate, usesStandardDeviation, validate } from '../engine/config.js'
 import { travel, cost, walkthroughStepCost } from '../engine/geometry.js'
 import NumberField from './NumberField.vue'
 
 const lab = useLab()
 const draft = lab.draft
 const fork = lab.branchFrom
+const standardDeviation = usesStandardDeviation(draft)
+const spreadKey = standardDeviation ? 'standardDeviation' : 'variance'
 const dialog = ref(), tab = ref(draft.species[0].id), issue = ref({}), savedSpecies = ref(null)
 const copied = ref(false), advanced = ref(false), rewards = ref(false), discarding = ref(false), applying = ref(false)
 const selected = computed(() => draft.species.find(s => s.id===tab.value) ?? draft.species[0])
@@ -43,7 +46,7 @@ function add(copy=false) {
   let name = copy ? stem : 'Species '+(draft.species.length+1)
   let i = 2
   while (draft.species.some(s=>s.name.toLowerCase()===name.toLowerCase())) name=stem+' '+i++
-  draft.species.push(copy ? { ...JSON.parse(JSON.stringify(original)),id,name,color } : speciesTemplate(id,name,color))
+  draft.species.push(copy ? { ...JSON.parse(JSON.stringify(original)),id,name,color } : speciesTemplate(id,name,color,10,true,draft.version))
   tab.value=id
 }
 function remove() {
@@ -149,12 +152,23 @@ onMounted(()=>dialog.value.showModal())
       <section class="setting-section">
         <h2>When they reproduce</h2>
         <div class="form-seam">
-          <div class="seam-copy"><p>Newborn traits are sampled from a Gaussian centered on the parent’s trait.</p><small>Each trait has independent variance σ². Inherited traits have a minimum of 1.</small></div>
+          <div class="seam-copy">
+            <p>Newborn traits are drawn from a normal distribution centered on the parent’s trait.</p>
+            <small v-if="standardDeviation">Standard deviation (σ) sets how far the trait usually changes. Zero keeps the parent’s value. Sense range can reach zero. Speed and size stay positive.</small>
+            <small v-else>This setup uses variance (σ²) and a minimum inherited trait of 1.</small>
+          </div>
           <div class="form-stack">
             <div v-for="key in TRAITS" :key="key" class="variance-row">
-              <NumberField :id="selected.id+'.variance.'+key" v-model="selected.variance[key]" :label="'σ² '+labels[key]"
-                :min=".01" :max="10" :step=".01" :pace="1" :tint="swatches[key]" :disabled="!selected.mutation[key]" :error="issue[selected.id+'.variance.'+key]"/>
-              <div class="variance-meta"><small>σ = {{ Math.sqrt(selected.variance[key]).toFixed(2) }} trait points</small><label><input type="checkbox" v-model="selected.mutation[key]"> Allow {{ key }} mutation</label></div>
+              <NumberField :id="selected.id+'.'+spreadKey+'.'+key" v-model="selected[spreadKey][key]"
+                :label="(standardDeviation ? 'σ ' : 'σ² ')+labels[key]"
+                :min="standardDeviation ? 0 : .01" :max="10" :step=".01" :pace="1" :tint="swatches[key]"
+                :disabled="!selected.mutation[key]" :error="issue[selected.id+'.'+spreadKey+'.'+key]"/>
+              <div class="variance-meta">
+                <small v-if="Number.isFinite(selected[spreadKey][key])">
+                  {{ standardDeviation ? 'Variance (σ²) = '+Number((selected[spreadKey][key] ** 2).toFixed(4)) : 'σ = '+Math.sqrt(selected[spreadKey][key]).toFixed(2)+' trait points' }}
+                </small>
+                <label><input type="checkbox" v-model="selected.mutation[key]"> Allow {{ key }} mutation</label>
+              </div>
             </div>
           </div>
         </div>
@@ -196,7 +210,7 @@ onMounted(()=>dialog.value.showModal())
         <div class="setting-inset final-fields">
           <label class="run-name">Run name <input id="name" v-model="draft.name" maxlength="60"></label>
           <NumberField id="days" v-model="draft.days" label="Days to run" :min="10" :max="1000" :error="issue.days"/>
-          <label v-if="draft.version === VERSION" class="run-name">End each day
+          <label v-if="draft.version >= SETTLED_RULE_VERSION" class="run-name">End each day
             <select v-model="draft.endMode">
               <option value="settled">When all blobs settle or die</option>
               <option value="timed">After a fixed time</option>
@@ -208,7 +222,7 @@ onMounted(()=>dialog.value.showModal())
             <div class="quick-picks"><button v-for="n in [1,5,10,20,30,60]" :key="n" type="button" class="secondary" :aria-pressed="seconds===n" @click="seconds=n">{{ n }} s</button></div>
             <small class="quiet">Up to {{ ((draft.days*seconds)/60).toFixed(1) }} min of playback at 1×</small>
           </template>
-          <NumberField id="seed" v-model="draft.seed" label="Random seed" :min="1" :max="100" :disabled="fork!=null" :error="issue.seed"/>
+          <NumberField id="seed" v-model="draft.seed" label="Random seed" :min="1" :max="MAX_SEED" :disabled="fork!=null" :error="issue.seed"/>
           <div class="seed-actions">
             <button v-if="fork==null" type="button" class="secondary" @click="draft.seed=randomSeed(draft.seed)"><Dices :size="16"/> Roll seed</button>
             <button type="button" class="secondary" @click="copySeed"><component :is="copied ? Check : Copy" :size="16"/>{{ copied ? 'Copied' : 'Copy seed' }}</button>

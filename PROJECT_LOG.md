@@ -57,3 +57,4 @@
 - Plants and prey still give one food credit each, but meals no longer refill energy by default. Saved runs keep their chosen refill amounts.
 - New setups use the original engine’s hunting rule. Prey can be at most 80% of the hunter’s size. Older setups and replays keep the 20% rule.
 - New setups end the day when all blobs are home or dead. Fixed time remains available. Runs stop at extinction, and the ribbon tile opens the last scene.
+- Added seed 118 and size settings of 1.00 and 0.50 to the paired experiment. New setups use standard deviation for mutations and let traits evolve below 1. Saved runs keep their original rules.

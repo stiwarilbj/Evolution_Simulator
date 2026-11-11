@@ -196,6 +196,7 @@ function draw3d(blobs, frame, view, { min, max }) {
   if (props.layers?.sense && props.layers.cohortSense) {
     sight = (props.layers.selected ? indicators : blobs).filter(inSightCohort)
   }
+  sight = sight.filter(b => b.sense > 0)
   const vision = buffer('vision', sight.length)
   const energy = buffer('energy', props.layers?.energy ? indicators.length : 0)
   const credit = buffer('credits', props.layers?.credits ? indicators.reduce((n,b) => n + b.credits, 0) : 0)
@@ -205,7 +206,7 @@ function draw3d(blobs, frame, view, { min, max }) {
   bodyIds = []
   const close = props.follow && chosen?.alive
   for (const [i, b] of blobs.entries()) {
-    const x = b.x - 250, z = b.y - 250, r = b.r
+    const x = b.x - 250, z = b.y - 250, r = Math.max(.25, b.r)
     const moving = b.alive && b.state < 5 && frame.time > 0 && (frame.duration == null || frame.time < frame.duration)
     const bite = close && b.id===chosen.id && recentBites.has(b.id) ? 1-(frame.time-recentBites.get(b.id))/.28 : 0
     const bob = moving && !reduced.matches ? Math.sin(frame.time * 17 + b.id) * .10 + bite*.15 : 0
@@ -330,8 +331,10 @@ function draw2d(blobs, frame, view, { min, max }) {
   plants.forEach(({q,r}) => softShadow(q.x+r*.38,q.y+r*.08,r*1.65,r*(overheadView?1.15:.54)))
   markers.forEach(({b,q,t}) => {
     const r = Math.max(1.2, overheadView ? b.r * width/(overhead.right-overhead.left) : Math.hypot(t.x-q.x,t.y-q.y) / 2.15)
-    if (props.layers?.sense && eligible(b) && (!props.layers.cohortSense || inSightCohort(b))) {
-      const senseRadius = overheadView ? b.sense * width/(overhead.right-overhead.left) : b.sense*r/b.r
+    if (props.layers?.sense && b.sense > 0 && eligible(b) && (!props.layers.cohortSense || inSightCohort(b))) {
+      const unit = p(b.x-250,2.35,b.y-250)
+      const scale = overheadView ? width/(overhead.right-overhead.left) : Math.hypot(unit.x-q.x,unit.y-q.y)/2.15
+      const senseRadius = b.sense * scale
       ellipse(q.x,q.y,senseRadius,senseRadius*(overheadView ? 1 : .36),'#E4F5FE')
     }
     softShadow(q.x+r*.42,q.y+r*.09,r*1.7,r*(overheadView?1.12:.51))

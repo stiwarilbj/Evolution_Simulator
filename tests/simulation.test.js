@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { LEGACY_RULE_VERSION, starter, plantsForDay, rulesFor, validate, validateRevisions } from '../src/engine/config.js'
+import { LEGACY_RULE_VERSION, MAX_SEED, SETTLED_RULE_VERSION, starter, plantsForDay, randomSeed,
+  rulesFor, setupForNewRun, speciesTemplate, validate, validateRevisions } from '../src/engine/config.js'
 import { canHunt, cost, radius, walkthroughStepCost } from '../src/engine/geometry.js'
 import { normal } from '../src/engine/random.js'
 import { dawn, dusk, founders, snapshot, step } from '../src/engine/simulation.js'
@@ -118,10 +119,11 @@ test('energy depletes immediately and a zero-energy collision cannot feed or rep
   assert.equal(step(field, config, field.limit, true).summary.rows.all.births, 0)
 })
 
-test('dusk uses the survival thresholds and true Gaussian variance once per newborn', () => {
+test('dusk uses survival thresholds and samples each unlocked trait once', () => {
   const config = starter()
   config.species[0].mutation.size = false
-  config.species[0].variance.speed = 4
+  config.species[0].standardDeviation.speed = 2
+  config.species[0].standardDeviation.sense = 0
   const field = dawn(config, 1, founders(config))
   const [unfed, one, two, far] = field.blobs
   field.blobs = [unfed, one, two, far]
@@ -138,8 +140,50 @@ test('dusk uses the survival thresholds and true Gaussian variance once per newb
   assert.equal(row.causes['Missed home'], 1)
   assert.equal(child.speed, 120 + 2 * normal(config.seed, 1, child.id, 0))
   assert.equal(child.size, two.size)
+  assert.equal(child.sense, two.sense)
   assert.equal(child.age, 0)
   assert.equal(dusk(field, config), result)
+})
+
+test('the video mutation rules allow sub-one traits and zero sight while older runs keep variance and their floor', () => {
+  const oldSpecies = speciesTemplate('blue', 'Blue', '#406780', 10, true, SETTLED_RULE_VERSION)
+  oldSpecies.variance = { speed: 4, size: 1, sense: 4 }
+  const old = { ...starter(), seed: 118, version: SETTLED_RULE_VERSION, species: [oldSpecies] }
+  const current = setupForNewRun(old)
+  const founder = { ...founders(old).roster[0], speed: 1, size: 1, sense: 1 }
+  const checkpoint = { roster: [founder], nextId: 7 }
+  function newborn(config) {
+    const field = dawn(config, 1, checkpoint)
+    Object.assign(field.blobs[0], { home: true, credits: 2 })
+    return dusk(field, config).checkpoint.roster.at(-1)
+  }
+  assert.deepEqual(current.species[0].standardDeviation, { speed: 2, size: 1, sense: 2 })
+  assert.deepEqual(oldSpecies.variance, { speed: 4, size: 1, sense: 4 })
+  assert.deepEqual(validate(old), {})
+  assert.deepEqual(validate(current), {})
+  const previous = newborn(old)
+  const child = newborn(current)
+  assert.deepEqual([previous.speed, previous.size, previous.sense], [1, 1, 1])
+  assert.equal(child.speed, 2 ** -1022)
+  assert.equal(child.size, 1 + normal(118, 1, child.id, 1))
+  assert.equal(child.sense, 0)
+
+  const field = dawn(current, 2, { roster: [child], nextId: 8 })
+  const result = step(field, current)
+  assert.equal(result.summary.rows.all.population, 0)
+  assert.equal(result.summary.rows.all.causes.Starvation, 1)
+})
+
+test('a natural day can settle at the emergency limit even with a zero-cost moving blob', () => {
+  const config = { ...starter(), metabolism: 'product' }
+  const founder = { ...founders(config).roster[0], sense: 0 }
+  const field = dawn(config, 1, { roster: [founder], nextId: 2 })
+  field.plants = []
+  field.tick = 999_999
+  const result = step(field, config)
+  assert.equal(field.tick, 1_000_000)
+  assert.equal(result.summary.rows.all.causes.Starvation, 1)
+  assert.equal(snapshot(field).duration, 50_000)
 })
 
 test('product cost scales cubically in size, quadratically in speed, and linearly in sense', () => {
@@ -219,7 +263,12 @@ test('configuration bounds, food schedules, and quantiles use the documented def
   const config = starter()
   assert.deepEqual(validate(config), {})
   assert.ok(validate({ ...config, days:9, duration:601, food:1001, seed:0 }).days)
-  assert.ok(validate({ ...config, species:[{ ...config.species[0], variance:{ speed:0, size:.25, sense:.25 } }] })['blue.variance.speed'])
+  assert.deepEqual(validate({ ...config, seed:118 }), {})
+  assert.deepEqual(validate({ ...config, seed:MAX_SEED }), {})
+  for (const seed of [0, 118.5, MAX_SEED + 1]) assert.ok(validate({ ...config, seed }).seed)
+  const rerolled = randomSeed(MAX_SEED)
+  assert.ok(Number.isInteger(rerolled) && rerolled >= 1 && rerolled < MAX_SEED)
+  assert.ok(validate({ ...config, species:[{ ...config.species[0], standardDeviation:{ speed:-.01, size:.5, sense:10 } }] })['blue.standardDeviation.speed'])
   config.scheduleMode = 'ramp'
   config.schedule = [{ day: 5, food: 100 }]
   assert.equal(plantsForDay(config, 3), 75)
@@ -264,8 +313,9 @@ test('CSV exports per-scope rows and distinguishes missing measurements from zer
 })
 
 test('branch histories keep founding traits and apply new food and duration only after the fork', () => {
-  const original = { ...starter(), version: LEGACY_RULE_VERSION, metabolism:'product' }
-  const branch = { ...original, version: starter().version, endMode:'timed', food:80, duration:200, metabolism:'walkthrough' }
+  const branch = { ...starter(), endMode:'timed', food:80, duration:200, metabolism:'walkthrough' }
+  const original = { ...branch, version: LEGACY_RULE_VERSION, food:50, duration:100, metabolism:'product',
+    species:branch.species.map(({ standardDeviation, ...s }) => ({ ...s, variance:{ speed:.25, size:.25, sense:.25 } })) }
   const revisions = [{ day:1, setup:original }, { day:3, setup:branch }]
   assert.deepEqual(validate(original), {})
   assert.equal(validateRevisions(branch,revisions),true)
@@ -281,6 +331,7 @@ test('branch histories keep founding traits and apply new food and duration only
     summaries.push(result.summary)
   }
   const rows = csv({ id:'branch', setup:branch, revisions, summaries }, 'all').split('\r\n').slice(1)
-  assert.deepEqual(rows.map(row => row.split(',')[2]), ['"1"', '"1"', '"3"'])
+  assert.deepEqual(rows.map(row => row.split(',')[2]), ['"1"', '"1"', '"4"'])
+  assert.deepEqual(rows.map(row => row.split(',')[5]), ['"1"', '"1"', '"3"'])
   assert.equal(validateRevisions({ ...branch, seed:2 },revisions),false)
 })

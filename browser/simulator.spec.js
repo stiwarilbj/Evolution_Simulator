@@ -139,6 +139,13 @@ test('the production build runs a new experiment and shows its charts @pages', a
   await openSimulator(page)
   await expect(page.getByRole('heading', { name: 'Current Generation Stats' })).toBeVisible()
   await startRun(page, '10', async () => {
+    await page.getByRole('spinbutton', { name: 'Random seed' }).fill('118')
+    const size = page.getByRole('spinbutton', { name: 'σ Size', exact: true })
+    const sizeRow = page.locator('.variance-row').filter({ has: size })
+    await size.fill('1.00')
+    await expect(sizeRow.getByText('Variance (σ²) = 1', { exact: true })).toBeVisible()
+    await size.fill('0.50')
+    await expect(sizeRow.getByText('Variance (σ²) = 0.25', { exact: true })).toBeVisible()
     await expect(page.getByRole('combobox', { name: 'End each day' })).toHaveValue('settled')
     await page.getByRole('button', { name: /^Refill rewards/ }).click()
     await expect(page.getByRole('spinbutton', { name: 'Plant reward' })).toHaveValue('0')
@@ -1336,7 +1343,8 @@ test('a copied setup link keeps the shared settings after reload', async ({ page
   await openSimulator(page)
   await startRun(page, '10', async () => {
     await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('321')
-    await page.getByRole('spinbutton', { name: 'Random seed' }).fill('37')
+    await page.getByRole('spinbutton', { name: 'Random seed' }).fill('118')
+    await page.getByRole('spinbutton', { name: 'σ Size', exact: true }).fill('1.00')
   })
   await page.getByRole('button', { name: 'Run options' }).click()
   await page.getByRole('button', { name: 'Run Library' }).click()
@@ -1359,7 +1367,8 @@ test('a copied setup link keeps the shared settings after reload', async ({ page
     await recipient.reload()
     await expect(name).toHaveValue('Browser test run')
     await expect(food).toHaveValue('321')
-    await expect(settings.getByRole('spinbutton', { name: 'Random seed' })).toHaveValue('37')
+    await expect(settings.getByRole('spinbutton', { name: 'Random seed' })).toHaveValue('118')
+    await expect(settings.getByRole('spinbutton', { name: 'σ Size', exact: true })).toHaveValue('1.00')
     await expect(recipient).toHaveURL(link)
 
     await settings.getByRole('button', { name: 'Close settings' }).click()
@@ -1419,12 +1428,18 @@ test('a replay applies the predation threshold saved with its setup', async ({ p
   Object.assign(setup.species[1], { enabled: true, count: 30, size: 12, energy: 1000, sense: 60 })
 
   for (const [version, threshold] of [[setup.version, 25], [LEGACY_RULE_VERSION, 20]]) {
+    const species = version === LEGACY_RULE_VERSION
+      ? setup.species.map(({ standardDeviation, ...s }) => ({ ...s, variance:{ speed:.25, size:.25, sense:.25 } }))
+      : setup.species
     await openRunLibrary(page)
     await page.getByRole('dialog', { name: 'Run Library' }).locator('input[type=file]').setInputFiles({
       name: 'predation.json',
       mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify({ ...setup, version })),
+      buffer: Buffer.from(JSON.stringify({ ...setup, version, species })),
     })
+    if (version === LEGACY_RULE_VERSION) {
+      await expect(page.getByRole('spinbutton', { name: 'σ² Size', exact: true })).toHaveValue('0.25')
+    }
     await page.getByRole('button', { name: /^Advanced Rules/ }).click()
     await expect(page.getByText(`A hunter must be at least ${threshold}% larger than its prey.`)).toBeVisible()
     await page.getByRole('button', { name: 'Evolve!' }).click()
@@ -1787,7 +1802,7 @@ test('a stalled size-mutation experiment times out and can be run again', async 
     let stalled
     window.Worker = class extends NativeWorker {
       postMessage(data) {
-        if (!stalled && data.type === 'init' && data.config.name.startsWith('Size variance · ')) {
+        if (!stalled && data.type === 'init' && data.config.name.startsWith('Size mutation · ')) {
           stalled = this
           return
         }
@@ -1804,7 +1819,7 @@ test('a stalled size-mutation experiment times out and can be run again', async 
   const startPair = page.getByRole('button', { name: 'Run both and compare' })
   await expect(startPair).toBeEnabled()
   await page.clock.install()
-  await page.getByRole('spinbutton', { name: 'Seed', exact: true }).fill('20')
+  await expect(page.getByRole('spinbutton', { name: 'Seed', exact: true })).toHaveValue('118')
   await startPair.click()
   const progress = page.getByRole('progressbar', { name: 'Paired experiment progress' })
   await expect(progress).toBeVisible()
@@ -1813,15 +1828,15 @@ test('a stalled size-mutation experiment times out and can be run again', async 
   await expect(page.getByRole('status').filter({ hasText: 'The experiment took too long to start. Try again.' })).toBeVisible()
   await expect(progress).toHaveCount(0)
   expect(await page.evaluate(() => window.stalledPairWorkerTerminated)).toBe(true)
-  await expect(page.getByRole('spinbutton', { name: 'Seed', exact: true })).toHaveValue('20')
+  await expect(page.getByRole('spinbutton', { name: 'Seed', exact: true })).toHaveValue('118')
   await expect(startPair).toBeEnabled()
 
   await startPair.click()
   await expect(page.getByRole('heading', { name: 'Compare runs', exact: true })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByRole('heading', { name: 'Day 1 results' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Play comparison' })).toBeEnabled()
-  await expect(page.getByRole('region', { name: 'Left run' }).getByRole('heading')).toHaveText(/Wide .* Seed 20/)
-  await expect(page.getByRole('region', { name: 'Right run' }).getByRole('heading')).toHaveText(/Narrow .* Seed 20/)
+  await expect(page.getByRole('region', { name: 'Left run' }).getByRole('heading')).toHaveText(/Wide \(1\.00\).*Seed 118/)
+  await expect(page.getByRole('region', { name: 'Right run' }).getByRole('heading')).toHaveText(/Narrow \(0\.50\).*Seed 118/)
 })
 
 test('Compare keeps a cleared run selector empty when the page reloads', async ({ page }) => {

@@ -1,12 +1,18 @@
 export const TRAITS = ['speed', 'size', 'sense']
 export const PALETTE = ['#406780', '#F47E18', '#CE6591', '#80A653', '#9B7ACA', '#46A49D', '#D5A84C', '#C76052']
 export const LEGACY_RULE_VERSION = 1
-export const VERSION = 3
-export const endsWhenSettled = config => config.version >= 3 && config.endMode === 'settled'
+export const SETTLED_RULE_VERSION = 3
+export const VERSION = 4
+export const MAX_SEED = 0xffffffff
+export const endsWhenSettled = config => config.version >= SETTLED_RULE_VERSION && config.endMode === 'settled'
+export const usesStandardDeviation = config => config.version >= 4
 
-export function speciesTemplate(id, name, color, count = 10, enabled = true) {
+export function speciesTemplate(id, name, color, count = 10, enabled = true, version = VERSION) {
+  const spread = usesStandardDeviation({ version })
+    ? { standardDeviation: { speed: 0.5, size: 0.5, sense: 0.5 } }
+    : { variance: { speed: 0.25, size: 0.25, sense: 0.25 } }
   return { id, name, color, count, enabled, energy: 500, speed: 10, size: 10, sense: 20,
-    variance: { speed: 0.25, size: 0.25, sense: 0.25 },
+    ...spread,
     mutation: { speed: true, size: true, sense: true } }
 }
 
@@ -28,17 +34,17 @@ export function validate(config) {
       errors[key] = `${name} must be ${integer ? 'a whole number ' : ''}from ${min} to ${max}.`
     }
   }
-  if (!config || ![LEGACY_RULE_VERSION, 2, VERSION].includes(config.version)) {
+  if (!config || ![LEGACY_RULE_VERSION, 2, SETTLED_RULE_VERSION, VERSION].includes(config.version)) {
     return { setup: 'Choose a setup file with a supported rule version.' }
   }
   if (typeof config.name !== 'string' || !config.name.trim() || config.name.trim().length > 60) errors.name = 'Enter a run name with 1–60 characters.'
   number('days', 'Days', config.days, 10, 1000)
-  if (config.version === VERSION && !['settled', 'timed'].includes(config.endMode)) errors.endMode = 'Choose when each day ends.'
+  if (config.version >= SETTLED_RULE_VERSION && !['settled', 'timed'].includes(config.endMode)) errors.endMode = 'Choose when each day ends.'
   if (!endsWhenSettled(config)) {
     number('duration', 'Seconds per day', config.duration / 10, 1, 60, false)
     if (!errors.duration && !Number.isInteger(config.duration)) errors.duration = 'Enter seconds in tenths.'
   }
-  number('seed', 'Seed', config.seed, 1, 100)
+  number('seed', 'Seed', config.seed, 1, MAX_SEED)
   number('food', 'Starting plants', config.food, 10, 1000)
   number('plantReward', 'Plant reward', config.plantReward, 0, 1000)
   number('preyReward', 'Prey reward', config.preyReward, 0, 1000)
@@ -76,7 +82,11 @@ export function validate(config) {
     number(item.id + '.energy', 'Starting energy', item.energy, 10, 1000)
     for (const trait of TRAITS) {
       number(item.id + '.' + trait, trait, item[trait], 1, 100)
-      number(item.id + '.variance.' + trait, 'Variance', item.variance?.[trait], 0.01, 10, false)
+      if (usesStandardDeviation(config)) {
+        number(item.id + '.standardDeviation.' + trait, 'Standard deviation', item.standardDeviation?.[trait], 0, 10, false)
+      } else {
+        number(item.id + '.variance.' + trait, 'Variance', item.variance?.[trait], 0.01, 10, false)
+      }
       if (typeof item.mutation?.[trait] !== 'boolean') errors[item.id + '.mutation'] = 'Specify which traits mutate.'
     }
   }
@@ -120,7 +130,15 @@ export function validateRevisions(setup, revisions) {
 }
 
 export function randomSeed(exclude = 0) {
-  if (!exclude) return 1 + Math.floor(Math.random() * 100)
-  const draw = 1 + Math.floor(Math.random() * 99)
+  if (!Number.isInteger(exclude) || exclude < 1 || exclude > MAX_SEED) return 1 + Math.floor(Math.random() * MAX_SEED)
+  const draw = 1 + Math.floor(Math.random() * (MAX_SEED - 1))
   return draw >= exclude ? draw + 1 : draw
+}
+
+export function setupForNewRun(setup) {
+  if (setup.version !== SETTLED_RULE_VERSION) return setup
+  const species = setup.species.map(({ variance, ...item }) => ({
+    ...item, standardDeviation: Object.fromEntries(TRAITS.map(trait => [trait, Math.sqrt(variance[trait])])),
+  }))
+  return { ...setup, version: VERSION, species }
 }

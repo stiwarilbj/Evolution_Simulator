@@ -1,10 +1,13 @@
-import { endsWhenSettled, plantsForDay, TRAITS } from './config.js'
+import { endsWhenSettled, plantsForDay, TRAITS, usesStandardDeviation } from './config.js'
 import { random, normal, shuffle } from './random.js'
 import { summaries } from './stats.js'
 import { FIELD, DT, WALKTHROUGH_STEP, Grid, clamp, radius, travel, cost, walkthroughStepCost,
   canHunt, turn, homePoints, pathOf, contact } from './geometry.js'
 
 export const STATES = ['Searching', 'Foraging', 'Chasing', 'Fleeing', 'Returning', 'Home', 'Dead', 'Born']
+const MIN_POSITIVE_TRAIT = 2 ** -1022
+const MAX_SETTLED_STEPS = 1_000_000
+const stepLimit = (ctx, config) => ctx.limit ?? (usesStandardDeviation(config) ? MAX_SETTLED_STEPS : Infinity)
 
 export function founders(config) {
   let id = 1
@@ -71,7 +74,7 @@ function nearest(blob, candidates, eligible) {
 function intent(blob, ctx, config, plantGrid, blobGrid) {
   const nearby = [...blobGrid.near(blob.x, blob.y, blob.sense)]
   const threat = nearest(blob, nearby, other => canHunt(other, blob, config) && other.credits < 2)
-  const timeLeft = ctx.limit == null ? Infinity : (ctx.limit - ctx.tick) * (ctx.stepSeconds ?? DT)
+  const timeLeft = (stepLimit(ctx, config) - ctx.tick) * (ctx.stepSeconds ?? DT)
   const left = Math.min(timeLeft, blob.energy / blob.rate)
   const homes = homePoints(blob)
   const base = homes[0]
@@ -138,7 +141,15 @@ function refugeContact(blob, path) {
 function tick(ctx, config) {
   const seconds = ctx.stepSeconds ?? DT
   const discreteCost = config.metabolism === 'walkthrough'
-  const active = ctx.blobs.filter(b => b.alive && !b.home)
+  const active = ctx.blobs.filter(b => {
+    if (!b.alive || b.home) return false
+    // An inherited speed can be positive but too small to change a field coordinate.
+    if (usesStandardDeviation(config) && b.speedWorld * seconds < Number.EPSILON) {
+      kill(ctx, b, ctx.tick * seconds, b.credits ? 'Missed home' : 'Starvation')
+      return false
+    }
+    return true
+  })
   if (!active.length) {
     ctx.tick++
     return
@@ -250,7 +261,8 @@ function tick(ctx, config) {
 
 export function step(ctx, config, count = 1, skipIdle = false) {
   if (ctx.settled) return ctx.settled
-  const stop = Math.min(ctx.limit ?? Infinity, ctx.tick + count)
+  const limit = stepLimit(ctx, config)
+  const stop = Math.min(limit, ctx.tick + count)
   const hasActive = () => ctx.blobs.some(b => b.alive && !b.home)
   while (ctx.tick < stop) {
     if ((ctx.limit == null || skipIdle) && !hasActive()) {
@@ -260,7 +272,7 @@ export function step(ctx, config, count = 1, skipIdle = false) {
     }
     tick(ctx, config)
   }
-  return ctx.tick === ctx.limit || (ctx.limit == null && !hasActive()) ? dusk(ctx, config) : null
+  return ctx.tick === limit || (ctx.limit == null && !hasActive()) ? dusk(ctx, config) : null
 }
 
 export function dusk(ctx, config) {
@@ -268,6 +280,7 @@ export function dusk(ctx, config) {
   const closing = []
   const time = (ctx.limit ?? ctx.tick) * (ctx.stepSeconds ?? DT)
   const species = new Map(config.species.map(s => [s.id, s]))
+  const standard = usesStandardDeviation(config)
   for (const b of ctx.blobs) {
     if (!b.alive) continue
     if (!b.credits || !b.home) {
@@ -281,8 +294,10 @@ export function dusk(ctx, config) {
     const settings = species.get(b.species)
     const child = { ...survivor, age: 0, id: ctx.nextId++, parent: b.id, born: ctx.day }
     for (const [index, trait] of TRAITS.entries()) {
-      if (settings.mutation[trait]) child[trait] = Math.max(1, b[trait] + Math.sqrt(settings.variance[trait]) *
-        normal(config.seed, ctx.day, child.id, index))
+      if (!settings.mutation[trait]) continue
+      const deviation = standard ? settings.standardDeviation[trait] : Math.sqrt(settings.variance[trait])
+      const minimum = standard ? (trait === 'sense' ? 0 : MIN_POSITIVE_TRAIT) : 1
+      child[trait] = Math.max(minimum, b[trait] + deviation * normal(config.seed, ctx.day, child.id, index))
     }
     closing.push(child)
     const newborn = { ...child, x: b.x, y: b.y, angle: b.angle, r: radius(child.size),
