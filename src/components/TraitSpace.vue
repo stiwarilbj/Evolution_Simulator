@@ -8,7 +8,7 @@ const emit=defineEmits(['watch'])
 const lab=useLab()
 const day=ref(1), compare=ref(0), track=ref(null), other=ref(null), chosenId=ref(null)
 const loading=ref(false), issue=ref(''), compareIssue=ref('')
-const replayAttempt=ref(0)
+const replayAttempt=ref(0), compareAttempt=ref(0), compareLoading=ref(false)
 const angle=ref(-.58), tilt=ref(.48), bins=ref(20), metric=ref('speed'), percent=ref(false)
 let request=0, compareRequest=0, gesture
 const scoped=frame=>frame?.final.blobs.filter(b=>b.alive && (props.scope==='all'||props.scope===b.species)) ?? []
@@ -31,13 +31,15 @@ watch([day,runId,dayAvailable,replayAttempt],async()=>{
   catch(e){ if(id===request) issue.value=e.message }
   finally { if(id===request) loading.value=false }
 },{immediate:true})
-watch([compare,runId],async()=>{
+watch([compare,runId,compareAttempt],async()=>{
   const id=++compareRequest
   other.value=null
   compareIssue.value=''
-  if(!compare.value) return
+  compareLoading.value=compare.value>0
+  if(!compareLoading.value) return
   try{const result=await lab.getTrack(lab.run,compare.value); if(id===compareRequest) other.value=result}
   catch(e){if(id===compareRequest) compareIssue.value=e.message}
+  finally{if(id===compareRequest) compareLoading.value=false}
 })
 onBeforeUnmount(()=>{request++;compareRequest++})
 function wholeNumber(event,current,min,max){
@@ -118,7 +120,11 @@ function watchCreature(){
       <label>Bins <input :value="bins" type="number" min="5" max="50" @change="bins=wholeNumber($event,bins,5,50)"></label><label><input v-model="percent" type="checkbox"> Percentage</label>
       <label>Compare day <input :value="compare" type="number" min="0" :max="lab.completed" title="0 shows one day" @change="compare=wholeNumber($event,compare,0,lab.completed)"></label>
     </header>
-    <p v-if="compareIssue" class="issue">Could not load comparison Day {{ compare }}. {{ compareIssue }}</p>
+    <div v-if="compareIssue">
+      <p class="issue" role="alert">Could not load comparison Day {{ compare }}. {{ compareIssue }}</p>
+      <button class="secondary" @click="compareAttempt++">Retry comparison Day {{ compare }}</button>
+    </div>
+    <p v-else-if="compareLoading" class="quiet" role="status">Loading comparison Day {{ compare }}…</p>
     <svg v-if="track && histogram.bars.length" viewBox="0 0 760 165" class="histogram" aria-label="Trait histogram">
       <line x1="30" y1="135" x2="730" y2="135" stroke="#777268"/>
       <g v-for="([a,b],i) in histogram.bars" :key="i" :transform="'translate('+(30+700*i/histogram.bars.length)+' 0)'">
