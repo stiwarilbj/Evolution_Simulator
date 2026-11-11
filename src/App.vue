@@ -149,7 +149,7 @@ async function watchDay(day, id, { sense = false, atEnd = false } = {}) {
     else history.replaceState(null,'',address())
     if (sense) {
       await nextTick()
-      if (current()) world.value?.overhead()
+      if (current()) world.value?.overhead(sense==='cohort')
     }
   } finally {
     if (current()) navigating = false

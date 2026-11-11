@@ -21,6 +21,17 @@ const rows=computed(()=>{
   return visible.map(d=>({day:d.day,...d.rows[lab.scope],scopes:d.rows}))
 })
 const pinned=computed(()=>rows.value.find(row=>row.day===pin.value)?.scopes[lab.scope])
+const sightComparison=computed(()=>{
+  let narrow, wide, eligibleDays=0
+  for (const { day, sense } of rows.value) {
+    if (!(sense?.n >= 2) || !Number.isFinite(sense.sd)) continue
+    const reading={ day, ...sense, sd:sense.min===sense.max ? 0 : sense.sd }
+    eligibleDays++
+    if (!narrow || reading.sd<narrow.sd) narrow=reading
+    if (!wide || reading.sd>wide.sd) wide=reading
+  }
+  return { narrow, wide, eligibleDays, hasContrast:narrow?.sd!==wide?.sd }
+})
 const annotations=computed(()=>{
   const { setup, revisions, summaries } = lab.run
   const rules = revisions.length ? revisions : [{ day: 1, setup }]
@@ -159,6 +170,26 @@ watch(focused, async key=>{
         <button class="secondary" @click="lab.modal='table'">View table</button><button class="secondary" @click="emit('sense',pin)">Show sense circles</button>
         <button class="primary" @click="emit('watch',pin)">Watch day</button><button class="icon" aria-label="Clear pinned day" @click="pin=null">×</button>
       </div>
+      <details class="sight-comparison">
+        <summary>Compare sight ranges</summary>
+        <p v-if="sightComparison.eligibleDays<2" class="quiet">Choose at least two completed days with two or more living blobs in this species filter.</p>
+        <p v-else-if="!sightComparison.hasContrast" class="quiet">The eligible days in this range have the same sight spread.</p>
+        <template v-else>
+          <p class="quiet">{{ scopeName }} · Days {{ rows[0].day }}–{{ rows.at(-1).day }} · Spread is the sample standard deviation of sight ranges at dusk.</p>
+          <div class="sight-days">
+            <article v-for="[label,reading] in [['Narrowest spread',sightComparison.narrow],['Widest spread',sightComparison.wide]]" :key="label">
+              <h3>{{ label }} · Day {{ reading.day }}</h3>
+              <dl>
+                <div><dt>Blobs</dt><dd>{{ format(reading.n,0) }}</dd></div>
+                <div><dt>Spread</dt><dd>{{ format(reading.sd) }}</dd></div>
+                <div><dt>Mean</dt><dd>{{ format(reading.mean) }}</dd></div>
+                <div><dt>Min–max</dt><dd>{{ format(reading.min) }}–{{ format(reading.max) }}</dd></div>
+              </dl>
+              <button class="secondary" @click="emit('watch',reading.day,null,{ sense:'cohort', atEnd:true })">Show Day {{ reading.day }} at dusk</button>
+            </article>
+          </div>
+        </template>
+      </details>
       <template v-for="section in sectionOrder" :key="section">
         <div v-if="section==='compact'" class="compact-plots walkthrough-plots">
           <aside v-if="compactKey" class="plot-guide" aria-label="Trait chart line key">

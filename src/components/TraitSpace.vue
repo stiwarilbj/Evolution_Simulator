@@ -78,6 +78,22 @@ const meanX = computed(() => {
   if (mean == null) return null
   return singleValue.value ? histogramCenter : 30 + 700 * (mean - min) / (max - min)
 })
+function countAges(blobs) {
+  const counts=new Map()
+  for (const { age } of blobs) counts.set(age,(counts.get(age) ?? 0)+1)
+  return counts
+}
+const ages=computed(()=>{
+  const primary=countAges(cohort.value), comparison=countAges(second.value)
+  const values=[...new Set([...primary.keys(),...comparison.keys()])].sort((a,b)=>a-b)
+  return { primary, comparison, values }
+})
+function ageReading(count,total) {
+  return percent.value ? agePercentage(count,total) : format(count,0)
+}
+function agePercentage(count,total) {
+  return total ? format(100*(count ?? 0)/total,1)+'%' : '—'
+}
 function down(event){gesture={x:event.clientX,y:event.clientY};event.currentTarget.setPointerCapture?.(event.pointerId)}
 function move(event){if(!gesture)return;angle.value+=(event.clientX-gesture.x)*.012;tilt.value=Math.min(1.28,Math.max(-.8,tilt.value+(event.clientY-gesture.y)*.008));gesture={x:event.clientX,y:event.clientY}}
 function watchCreature(){
@@ -116,8 +132,8 @@ function watchCreature(){
       <button v-if="chosen" class="secondary" @click="watchCreature">Watch creature</button>
       <p class="quiet">{{ cohort.length }} living blobs at dusk. Rotate to inspect the axes.</p></aside>
     </div>
-    <header><h3>Trait distribution</h3><label>Trait <select v-model="metric"><option value="speed">Speed</option><option value="size">Size</option><option value="sense">Sense Range</option></select></label>
-      <label>Bins <input :value="bins" type="number" min="5" max="50" @change="bins=wholeNumber($event,bins,5,50)"></label><label><input v-model="percent" type="checkbox"> Percentage</label>
+    <header><h3>Trait distribution</h3><label>Trait <select v-model="metric"><option value="speed">Speed</option><option value="size">Size</option><option value="sense">Sense Range</option><option value="age">Age</option></select></label>
+      <label v-if="metric!=='age'">Bins <input :value="bins" type="number" min="5" max="50" @change="bins=wholeNumber($event,bins,5,50)"></label><label><input v-model="percent" type="checkbox"> Percentage</label>
       <label>Compare day <input :value="compare" type="number" min="0" :max="lab.completed" title="0 shows one day" @change="compare=wholeNumber($event,compare,0,lab.completed)"></label>
     </header>
     <div v-if="compareIssue">
@@ -125,7 +141,25 @@ function watchCreature(){
       <button class="secondary" @click="compareAttempt++">Retry comparison Day {{ compare }}</button>
     </div>
     <p v-else-if="compareLoading" class="quiet" role="status">Loading comparison Day {{ compare }}…</p>
-    <svg v-if="track && histogram.bars.length" viewBox="0 0 760 165" class="histogram" aria-label="Trait histogram">
+    <section v-if="metric==='age' && track" class="age-breakdown" aria-label="Age breakdown">
+      <p class="quiet">Age 0 means born that day. The table counts blobs alive at dusk.</p>
+      <table v-if="ages.values.length" aria-label="Living blobs by age">
+        <thead><tr><th scope="col">Age (days)</th><th scope="col">Day {{ day }}</th><th v-if="other" scope="col">Day {{ compare }}</th></tr></thead>
+        <tbody>
+          <tr v-for="age in ages.values" :key="age">
+            <th scope="row">{{ age }}</th>
+            <td>{{ ageReading(ages.primary.get(age) ?? 0,cohort.length) }}</td>
+            <td v-if="other">{{ ageReading(ages.comparison.get(age) ?? 0,second.length) }}</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr><th scope="row">Living blobs</th><td>{{ format(cohort.length,0) }}</td><td v-if="other">{{ format(second.length,0) }}</td></tr>
+          <tr><th scope="row">Newborn share</th><td>{{ agePercentage(ages.primary.get(0),cohort.length) }}</td><td v-if="other">{{ agePercentage(ages.comparison.get(0),second.length) }}</td></tr>
+        </tfoot>
+      </table>
+      <p v-else class="quiet">No living blobs in the selected species on these days.</p>
+    </section>
+    <svg v-else-if="metric!=='age' && track && histogram.bars.length" viewBox="0 0 760 165" class="histogram" aria-label="Trait histogram">
       <line x1="30" y1="135" x2="730" y2="135" stroke="#777268"/>
       <g v-for="([a,b],i) in histogram.bars" :key="i" :transform="'translate('+(30+700*i/histogram.bars.length)+' 0)'">
         <rect :x="4" :y="135-105*a/histogram.peak" :width="(700/histogram.bars.length-8)/(histogram.b?2:1)" :height="105*a/histogram.peak" fill="#83B3CE"><title>Day {{ day }} · {{ format(a,percent?1:0) }}</title></rect>
@@ -135,6 +169,6 @@ function watchCreature(){
       <text :x="singleValue ? histogramCenter : 30" y="156" fill="#BDBAB0" :text-anchor="singleValue ? 'middle' : 'start'">{{ format(histogram.min) }}</text>
       <text v-if="!singleValue" x="730" y="156" fill="#BDBAB0" text-anchor="end">{{ format(histogram.max) }}</text>
     </svg>
-    <p v-if="histogram.a" class="quiet">Day {{ day }} · {{ histogram.a }} samples · Mean {{ format(histogram.mean) }}</p>
+    <p v-if="metric!=='age' && histogram.a" class="quiet">Day {{ day }} · {{ histogram.a }} samples · Mean {{ format(histogram.mean) }}</p>
   </section>
 </template>

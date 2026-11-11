@@ -17,7 +17,7 @@ const board = ref(), surface = ref(), fullscreenActive = ref(false)
 const tool = ref(null), camera = ref('board'), quality = ref('auto'), details = ref(false)
 const eventFilter = ref('all')
 const dim = ref(false), hud = ref(false), rateReadout = ref(false), wasPlaying = ref(false)
-const layers = ref({ sense:false, speed:false, energy:false, credits:false, homes:false, selected:false, vision:false })
+const layers = ref({ sense:false, speed:false, energy:false, credits:false, homes:false, selected:false, vision:false, cohortSense:false })
 const fallback = ref(false)
 const layerNames = [
   ['sense',Eye,'Sense range','Show each creature’s sensing radius'],
@@ -71,6 +71,10 @@ function follow() {
   else details.value = true
 }
 function toggle(name) { tool.value = tool.value === name ? null : name }
+function toggleLayer(key) {
+  layers.value[key]=!layers.value[key]
+  if (key==='sense') layers.value.cohortSense=false
+}
 function startSeek() {
   if (!replayCanSeek.value) return
   wasPlaying.value = lab.playing
@@ -113,12 +117,22 @@ function eventName(e) {
   if (e.type === 'home') return 'Reached refuge'
   return e.id===lab.selected ? 'Born to #'+e.parent : 'Offspring #'+e.id
 }
-watch(() => lab.run.id, () => { details.value=false; tool.value=null; fit() })
+watch(() => lab.run.id, () => { details.value=false; tool.value=null; layers.value.cohortSense=false; fit() })
 watch(() => visible.value?.id, id => {
   if (id == null) layers.value.selected = false
 })
 watch(() => visible.value?.alive, alive => { if (alive===false) lab.following=false })
-defineExpose({ select, overhead:()=>{ lab.following=false; camera.value='overhead'; layers.value.sense=true } })
+function overhead(cohortSense) {
+  lab.following=false
+  if (cohortSense) {
+    select(null)
+    layers.value.selected=false
+  }
+  camera.value='overhead'
+  layers.value.sense=true
+  layers.value.cohortSense=cohortSense
+}
+defineExpose({ select, overhead })
 </script>
 <template>
   <main ref="surface" class="world" :class="{ 'is-following':lab.following, 'is-overhead':camera==='overhead' }" tabindex="-1" @keydown="shortcuts">
@@ -133,8 +147,8 @@ defineExpose({ select, overhead:()=>{ lab.following=false; camera.value='overhea
       </div>
       <div v-if="tool==='layers'" class="layer-panel pop">
         <button class="icon" aria-label="Close layers" @click="tool=null"><ChevronUp :size="20"/></button>
-        <button v-for="[key,Icon,label,tip] in layerNames" :key="key" class="icon layer" :aria-label="label" :aria-pressed="layers[key]" @click="layers[key]=!layers[key]">
-          <component :is="Icon" :size="22"/><span class="layer-name">{{ label }}</span><span class="layer-tip">{{ label }}<small>{{ tip }}</small></span>
+        <button v-for="[key,Icon,label,tip] in layerNames" :key="key" class="icon layer" :aria-label="label" :aria-pressed="layers[key]" @click="toggleLayer(key)">
+          <component :is="Icon" :size="22"/><span class="layer-name">{{ label }}</span><span class="layer-tip">{{ label }}<small>{{ key==='sense' && layers.cohortSense ? 'Show living creatures in the species filter' : tip }}</small></span>
         </button>
         <button class="icon" aria-label="More layer options" @click="toggle('layer-options')"><ChevronDown :size="17"/></button>
       </div>

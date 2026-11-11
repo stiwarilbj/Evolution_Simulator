@@ -179,6 +179,10 @@ function paintColor(b, min, max) {
   return color
 }
 
+function inSightCohort(blob) {
+  return blob.alive && (props.scope==='all' || blob.species===props.scope)
+}
+
 function draw3d(blobs, frame, view, { min, max }) {
   const detailed = blobs.length < 1500
   const chosen = blobs.find(b => b.id === props.selected)
@@ -188,7 +192,11 @@ function draw3d(blobs, frame, view, { min, max }) {
   const crosses = buffer('deadEye', blobs.filter(b => !b.alive).length * 2)
   const shadows = buffer('shadow', blobs.length + frame.plants.length)
   const pellets = buffer('pellet', frame.plants.length)
-  const vision = buffer('vision', props.layers?.sense ? indicators.length : 0)
+  let sight = props.layers?.sense ? indicators : []
+  if (props.layers?.sense && props.layers.cohortSense) {
+    sight = (props.layers.selected ? indicators : blobs).filter(inSightCohort)
+  }
+  const vision = buffer('vision', sight.length)
   const energy = buffer('energy', props.layers?.energy ? indicators.length : 0)
   const credit = buffer('credits', props.layers?.credits ? indicators.reduce((n,b) => n + b.credits, 0) : 0)
   const outlines = [chosen,blobs.find(b=>b.id===hovered.value && b.id!==chosen?.id)].filter(Boolean)
@@ -223,8 +231,8 @@ function draw3d(blobs, frame, view, { min, max }) {
     write(pellets, i, '#83A51E', x, 2.2, z, 1)
     write(shadows, blobs.length + i, '#FFFFFF', x + .8, .045, z + .35, 3.2, 2.3, 1, -Math.PI / 2)
   })
+  sight.forEach((b,i)=>write(vision, i, '#E4F5FE', b.x - 250, -.48, b.y - 250, b.sense, b.sense, 1, -Math.PI / 2))
   indicators.forEach((b, i) => {
-    if (vision.count) write(vision, i, '#E4F5FE', b.x - 250, -.48, b.y - 250, b.sense, b.sense, 1, -Math.PI / 2)
     if (energy.count) {
       color.copy(energyLow).lerp(energyFull, b.energy / b.capacity)
       write(energy, i, color, b.x - 250, .06, b.y - 250, b.r * 1.5, b.r * 1.5, 1, -Math.PI / 2)
@@ -322,7 +330,10 @@ function draw2d(blobs, frame, view, { min, max }) {
   plants.forEach(({q,r}) => softShadow(q.x+r*.38,q.y+r*.08,r*1.65,r*(overheadView?1.15:.54)))
   markers.forEach(({b,q,t}) => {
     const r = Math.max(1.2, overheadView ? b.r * width/(overhead.right-overhead.left) : Math.hypot(t.x-q.x,t.y-q.y) / 2.15)
-    if (props.layers?.sense && eligible(b)) ellipse(q.x,q.y,b.sense*r/b.r,b.sense*r/b.r*(props.camera === 'overhead' ? 1 : .36),'#E4F5FE')
+    if (props.layers?.sense && eligible(b) && (!props.layers.cohortSense || inSightCohort(b))) {
+      const senseRadius = overheadView ? b.sense * width/(overhead.right-overhead.left) : b.sense*r/b.r
+      ellipse(q.x,q.y,senseRadius,senseRadius*(overheadView ? 1 : .36),'#E4F5FE')
+    }
     softShadow(q.x+r*.42,q.y+r*.09,r*1.7,r*(overheadView?1.12:.51))
     if (props.layers?.energy && eligible(b)) ellipse(q.x,q.y,r*1.46,r*.43,b.energy/b.capacity>.45?'#F4DF86':'#CCCCCC')
     if (b.id === props.selected) {

@@ -51,3 +51,4 @@
 - Fixed World so clearing a creature selection shows the enabled layers for all creatures again.
 - Fixed Creature Details so replays show the distance to the nearest refuge while a blob is returning.
 - Added a retry for failed Trait Space comparisons so the main day and selected creature stay in view.
+- Added a sight range comparison in Trends that opens the narrowest and widest days from above at dusk. Added exact age counts and newborn shares in Trait Space.

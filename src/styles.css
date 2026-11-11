@@ -238,6 +238,14 @@ dd{margin:0;font-family:var(--mono);color:var(--cream);text-align:right}
 .restore-plots{margin:4px 0 13px}.restore-plots button{font-size:13px}
 .notice,.pinned-summary{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 15px;margin:6px 0 13px;border:1px solid var(--line);background:#1d1d1b;border-radius:5px;color:var(--muted)}
 .pinned-summary div{flex:1 1 255px}.pinned-summary small{display:block;margin-top:4px}.pinned-summary strong{font:16px var(--mono);color:var(--cream)}
+.sight-comparison{margin:0 0 14px;padding:8px 12px;border:1px solid var(--line);border-radius:5px;background:#1d1d1b}
+.sight-comparison summary{cursor:pointer;color:#7EC1DF}
+.sight-comparison p{margin:8px 0;font-size:14px}
+.sight-days{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:10px;margin-top:10px}
+.sight-days article{padding:10px;border:1px solid var(--line);border-radius:5px;background:#171717}
+.sight-days h3{font-size:15px;color:var(--cream)}
+.sight-days dl{display:flex;flex-wrap:wrap;gap:8px 20px;margin:8px 0 10px;font-size:13px}
+.sight-days dt{color:var(--muted)}.sight-days dd{text-align:left;color:#7EC1DF}
 .focus-backdrop{position:fixed;inset:0;display:grid;align-items:center;justify-items:center;padding:18px;z-index:16;background:#080808c9;backdrop-filter:blur(4px)}
 .focus-backdrop .trend-plot{width:min(1050px,100%);padding:17px;background:var(--stage);border-radius:7px;border:1px solid var(--line)}
 .focused-plot .chart-canvas{height:min(45vh,480px)}
@@ -246,6 +254,9 @@ dd{margin:0;font-family:var(--mono);color:var(--cream);text-align:right}
 .trait-space header{display:flex;gap:8px 16px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 .trait-space h2,.trait-space h3{flex:1 0 165px}
 .trait-space select,.trait-space input{min-height:29px}
+.age-breakdown{max-width:760px;padding:10px 12px;border:1px solid var(--line);border-radius:5px;background:#1d1d1b}
+.age-breakdown table{margin-top:8px}.age-breakdown th:first-child{text-align:left}
+.age-breakdown thead,.age-breakdown tfoot{color:#FADE69}
 .trait-space>div:has(canvas){display:flex;gap:16px;margin:10px 0 23px}
 .trait-space>div:has(canvas)>div{position:relative;flex:1;min-height:340px;min-width:0;background:#1d1d1b;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .trait-space canvas{display:block;max-width:100%;touch-action:none;cursor:grab}

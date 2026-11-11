@@ -819,6 +819,108 @@ test('mutation profiles follow the selected species and its trait switches', asy
   await expect(profile).toHaveValue('locked')
 })
 
+test('Trends compares sight spread in the filtered days and opens each closing cohort', async ({ page }) => {
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext
+    HTMLCanvasElement.prototype.getContext = function (kind, ...options) {
+      if (kind === 'webgl2') return null
+      return getContext.call(this, kind, ...options)
+    }
+    const { fillRect, fill } = CanvasRenderingContext2D.prototype
+    CanvasRenderingContext2D.prototype.fillRect = function (...args) {
+      if (this.canvas.classList.contains('world-canvas') && this.fillStyle === '#242424') window.sightCircles = 0
+      return fillRect.apply(this, args)
+    }
+    CanvasRenderingContext2D.prototype.fill = function (...args) {
+      if (this.canvas.classList.contains('world-canvas') && this.fillStyle === '#e4f5fe') window.sightCircles++
+      return fill.apply(this, args)
+    }
+  })
+  await openSimulator(page)
+  await startRun(page, '10', async () => {
+    await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('400')
+    await page.getByRole('button', { name: /^Orange/ }).click()
+    await page.getByLabel('Enabled', { exact: true }).check()
+    await page.getByRole('spinbutton', { name: 'Energy', exact: true }).fill('1000')
+  })
+  await quickThrough(page, 3)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('link', { name: 'Trends', exact: true }).click()
+  await page.getByLabel('Filter By Species').selectOption('blue')
+  await page.getByRole('combobox', { name: 'Range', exact: true }).selectOption('custom')
+  await page.getByLabel('From day').fill('2')
+  await page.getByLabel('To day').fill('2')
+  await page.getByText('Compare sight ranges', { exact: true }).click()
+  await expect(page.getByText(/Choose at least two completed days/)).toBeVisible()
+  await page.getByLabel('To day').fill('3')
+
+  const world = page.locator('main.world')
+  const clock = page.getByRole('slider', { name: 'Replay time' })
+  for (const [day, label, count, spread] of [[2, 'Narrowest', 180, '0.50'], [3, 'Widest', 261, '0.59']]) {
+    const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name: label + ' spread · Day ' + day }) })
+    await expect(card.getByText(String(count), { exact: true })).toBeVisible()
+    await expect(card.getByText(spread, { exact: true })).toBeVisible()
+    await card.getByRole('button', { name: 'Show Day ' + day + ' at dusk' }).click()
+    await expect(page).toHaveURL(new RegExp('/s/' + day + '/viewer$'))
+    await expect(world).toHaveClass(/is-overhead/)
+    await expect(clock).toHaveValue(await clock.getAttribute('max'))
+    await expect.poll(() => page.evaluate(() => window.sightCircles)).toBe(count)
+    if (day === 3) {
+      await page.getByRole('button', { name: 'View options' }).click()
+      await page.getByRole('button', { name: 'Creatures', exact: true }).click()
+      const creatures = page.getByRole('combobox', { name: 'Creature', exact: true })
+      const blue = await creatures.getByRole('option', { name: / · Blue$/ }).first().getAttribute('value')
+      await creatures.selectOption(blue)
+      await page.getByRole('button', { name: 'Close creature details' }).click()
+      await page.getByRole('button', { name: 'Layers', exact: true }).click()
+      await page.getByRole('button', { name: 'More layer options' }).click()
+      await page.getByRole('checkbox', { name: 'Selected creature only' }).check()
+      await expect.poll(() => page.evaluate(() => window.sightCircles)).toBe(1)
+    }
+    await page.goBack()
+    await expect(page.getByLabel('Filter By Species')).toHaveValue('blue')
+    await expect(page.getByLabel('From day')).toHaveValue('2')
+    await expect(card).toBeVisible()
+  }
+})
+
+test('Trait Space shows exact ages and newborn shares for both days and the selected species', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page, '10', async () => {
+    await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('400')
+    await page.getByRole('button', { name: /^Orange/ }).click()
+    await page.getByLabel('Enabled', { exact: true }).check()
+    await page.getByRole('spinbutton', { name: 'Energy', exact: true }).fill('1000')
+  })
+  await quickThrough(page, 3)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('link', { name: 'Trends', exact: true }).click()
+  await page.getByRole('button', { name: 'Trait Space', exact: true }).click()
+  await page.getByLabel('Filter By Species').selectOption('blue')
+  await page.getByRole('combobox', { name: 'Trait', exact: true }).selectOption('age')
+  const compare = page.getByRole('spinbutton', { name: 'Compare day' })
+  await compare.fill('2')
+  await compare.press('Tab')
+
+  const table = page.getByRole('table', { name: 'Living blobs by age' })
+  await expect(table.getByRole('columnheader')).toHaveText(['Age (days)', 'Day 3', 'Day 2'])
+  const cells = label => table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: label, exact: true }) }).getByRole('cell')
+  await expect(cells('0')).toHaveText(['116', '86'])
+  await expect(cells('3')).toHaveText(['41', '0'])
+  await expect(cells('Living blobs')).toHaveText(['261', '180'])
+  await expect(cells('Newborn share')).toHaveText(['44.4%', '47.8%'])
+  await expect(page.getByRole('spinbutton', { name: 'Bins' })).toHaveCount(0)
+  await page.getByRole('checkbox', { name: 'Percentage' }).check()
+  await expect(cells('0')).toHaveText(['44.4%', '47.8%'])
+  await page.getByLabel('Filter By Species').selectOption('orange')
+  await expect(cells('Living blobs')).toHaveText(['68', '40'])
+  await compare.fill('0')
+  await compare.press('Tab')
+  await expect(cells('Living blobs')).toHaveText(['68'])
+})
+
 test('Trait Space keeps selections within the species filter and only loads whole days', async ({ page }) => {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
