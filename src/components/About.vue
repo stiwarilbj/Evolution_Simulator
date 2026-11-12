@@ -2,11 +2,11 @@
 import { onBeforeUnmount, ref } from 'vue'
 import { useLab } from '../store.js'
 import { MAX_SEED } from '../engine/config.js'
-import { experiments, setupFor, sizeMutationPair, SIZE_MUTATION_SEED } from '../experiments.js'
+import { experiments, setupFor, sizeMutationPair, SIZE_MUTATION_DAYS, SIZE_MUTATION_SEED } from '../experiments.js'
 const lab=useLab()
 const emit=defineEmits(['world','compare'])
 const chapter=ref(0), video=ref('')
-const pairSeed=ref(SIZE_MUTATION_SEED), pairDays=ref(100), pairProgress=ref(null), pairMessage=ref('')
+const pairSeed=ref(SIZE_MUTATION_SEED), pairDays=ref(SIZE_MUTATION_DAYS), pairProgress=ref(null), pairMessage=ref('')
 let pairController
 const chapters=[
   ['The field','The tabletop is a 500-unit square. Pellets and creatures occupy the same flat plane.'],
@@ -69,10 +69,11 @@ onBeforeUnmount(() => pairController?.abort())
     <section><h2>Experiments</h2>
       <article class="paired-experiment" aria-labelledby="variance-title">
         <h3 id="variance-title">Compare size mutation</h3>
-        <p>Run the same setup twice with size standard deviations of 1.00 and 0.50. Both use the same seed, founders, food, and rules. Compare their hunts, traits, and population at the same point in a day.</p>
+        <p>Repeat the 600-generation video experiment with size standard deviations of 1.00 and 0.50. Both runs start with 50 blobs of size 10 and get 50 plants each day. Compare how size changes and replay the hunts that take place.</p>
+        <p><a href="https://www.youtube.com/watch?v=6nMo8T3T0L4&amp;t=459s" target="_blank" rel="noreferrer">Watch the experiment in the video</a></p>
         <form class="about-actions" @submit.prevent="runPair">
           <label>Seed <input v-model.number="pairSeed" type="number" min="1" :max="MAX_SEED" step="1" required :disabled="!!pairProgress"></label>
-          <label>Days per run <select v-model.number="pairDays" :disabled="!!pairProgress"><option :value="100">100</option><option :value="600">600</option></select></label>
+          <label>Days per run <select v-model.number="pairDays" :disabled="!!pairProgress"><option :value="SIZE_MUTATION_DAYS">{{ SIZE_MUTATION_DAYS }}</option><option :value="100">100</option></select></label>
           <button class="primary" :disabled="!!pairProgress">Run both and compare</button>
           <button v-if="pairProgress && !pairProgress.saving" type="button" class="secondary" @click="pairController?.abort()">Cancel</button>
         </form>

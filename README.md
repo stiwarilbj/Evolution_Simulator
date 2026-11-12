@@ -20,7 +20,7 @@ Open the link shown in your terminal.
 - **World** plays a day. Click a blob to follow it, or use **Quick Sim** to skip ahead. If the last blob dies, click the extinction tile to watch the ending.
 - **Settings** lets you make species and choose how much their traits can change.
 - **Trends** shows how the population and its traits change over time. Compare sight ranges or see how many blobs are each age.
-- **About → Experiments** compares size changes of 1.00 and 0.50 using seed 118.
+- **About → Experiments** runs the 600-generation size test from the video. Compare size changes and watch hunts from each run.
 
 Use `npm test` to run the checks and `npm run build` to build the site.
 

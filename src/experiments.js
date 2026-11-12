@@ -1,6 +1,14 @@
 import { starter } from './engine/config.js'
 
 export const SIZE_MUTATION_SEED = 118
+export const SIZE_MUTATION_DAYS = 600
+
+function applySizeExperiment(config, size, seed = SIZE_MUTATION_SEED, days = SIZE_MUTATION_DAYS) {
+  config.seed = seed
+  config.days = days
+  config.foraging = 'walkthrough'
+  config.species[0].standardDeviation.size = size
+}
 
 export const experiments = [
   { title:'A finite table', detail:'Locked traits, 50 plants, 100 days. Find the carrying capacity.', build(c) {
@@ -18,14 +26,10 @@ export const experiments = [
     c.species[0].standardDeviation.sense=1
   }},
   { title:'Size mutation · wide', detail:'Seed 118, 600 days, and a size standard deviation of 1.00.', build(c) {
-    c.seed=SIZE_MUTATION_SEED
-    c.days=600
-    c.species[0].standardDeviation.size=1
+    applySizeExperiment(c, 1)
   }},
   { title:'Size mutation · narrow', detail:'Seed 118, 600 days, and a size standard deviation of 0.50.', build(c) {
-    c.seed=SIZE_MUTATION_SEED
-    c.days=600
-    c.species[0].standardDeviation.size=.5
+    applySizeExperiment(c, 0.5)
   }},
   { title:'Sudden scarcity', detail:'100 plants a day, then 10 starting on Day 51.', build(c) {
     c.days=120;c.food=100;c.scheduleMode='step';c.schedule=[{day:51,food:10}]
@@ -44,10 +48,8 @@ export function setupFor(experiment) {
 export function sizeMutationPair(seed, days) {
   return [['Wide', 1], ['Narrow', 0.5]].map(([label, size]) => {
     const setup = starter()
-    setup.seed = seed
-    setup.days = days
     setup.name = `Size mutation · ${label} (${size.toFixed(2)})`
-    setup.species[0].standardDeviation.size = size
+    applySizeExperiment(setup, size, seed, days)
     return setup
   })
 }

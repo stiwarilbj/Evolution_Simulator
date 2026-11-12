@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { BatteryMedium, CircleX, Copy, Dices, Leaf, Plus, Check, Trash2 } from 'lucide-vue-next'
 import { useLab } from '../store.js'
 import { endsWhenSettled, LEGACY_RULE_VERSION, MAX_SEED, PALETTE, SETTLED_RULE_VERSION, TRAITS,
-  randomSeed, speciesTemplate, usesStandardDeviation, validate } from '../engine/config.js'
+  randomSeed, speciesTemplate, usesStandardDeviation, usesWalkthroughForaging, validate } from '../engine/config.js'
 import { travel, cost, walkthroughStepCost } from '../engine/geometry.js'
 import NumberField from './NumberField.vue'
 
@@ -37,6 +37,13 @@ const endurance = computed(() => selected.value.energy/cost(selected.value,draft
 const swatches = { speed:'#9A5A57',size:'#44877C',sense:'#468298' }
 const labels = { speed:'Speed',size:'Size',sense:'Sense Range' }
 const titleErrors = computed(() => Object.entries(issue.value).map(([key,message])=>({key,message})))
+const foraging = computed({
+  get: () => usesWalkthroughForaging(draft) ? 'walkthrough' : 'standard',
+  set: value => {
+    if (value === 'walkthrough') draft.foraging = value
+    else delete draft.foraging
+  },
+})
 function add(copy=false) {
   const id = crypto.randomUUID()
   const original = selected.value
@@ -235,6 +242,10 @@ onMounted(()=>dialog.value.showModal())
         <div class="advanced setting-inset">
           <button type="button" class="secondary" :aria-expanded="advanced" @click="advanced=!advanced">Advanced Rules {{ advanced ? '▴' : '▾' }}</button>
           <div v-if="advanced" class="advanced-grid">
+            <label v-if="standardDeviation">Foraging rules <select v-model="foraging">
+              <option value="standard">Standard</option><option value="walkthrough">Video experiment</option>
+            </select></label>
+            <small v-if="foraging==='walkthrough'" class="quiet">Blobs turn in steps and start the next day where their parents reached the edge.</small>
             <label><input v-model="draft.predation" type="checkbox"> Predation</label>
             <label><input v-model="draft.sameSpecies" type="checkbox" :disabled="!draft.predation"> Same-species hunting</label>
             <small v-if="draft.predation" class="quiet predation-note">

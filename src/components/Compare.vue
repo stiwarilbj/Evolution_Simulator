@@ -5,6 +5,7 @@ import Board from './Board.vue'
 import TrendPlot from './TrendPlot.vue'
 import { useLab } from '../store.js'
 import { trackFrame } from '../track.js'
+import { usesWalkthroughForaging } from '../engine/config.js'
 import { format, METRICS, metricValue } from '../engine/stats.js'
 
 const props=defineProps({ initial:Object })
@@ -26,6 +27,17 @@ const selections=ref([null,null]), boards=[]
 let job=0, animation, previous=0
 const names=['Left run','Right run']
 const runs=computed(()=>[left.value,right.value])
+const experimentSizes=computed(()=>{
+  if (!horizon.value || leftId.value===rightId.value ||
+      !runs.value.every(run=>usesWalkthroughForaging(run.setup))) return null
+  return runs.value.map(run=>{
+    const species=run.setup.species.filter(s=>s.enabled && (scope.value==='all' || s.id===scope.value))
+    const count=species.reduce((total,s)=>total+s.count,0)
+    const start=count ? species.reduce((total,s)=>total+s.size*s.count,0)/count : null
+    const finish=run.summaries[horizon.value-1].rows[scope.value]?.size.mean ?? null
+    return { start, finish, change:start!=null && finish!=null ? finish-start : null }
+  })
+})
 const frames=computed(()=>tracks.value.map(track=>trackFrame(track,track.duration*fraction.value)))
 const commonSpecies=computed(()=>left.value?.setup.species.filter(s=>s.enabled&&right.value?.setup.species.some(b=>b.enabled&&b.id===s.id)) ?? [])
 const rows=computed(()=>Array.from({length:horizon.value},(_,i)=>({day:i+1,
@@ -89,9 +101,10 @@ function goToHunt(index) {
   const event=firstHunts.value[index]
   if (!event) return
   stop()
-  fraction.value=event.time/tracks.value[index].duration
+  fraction.value=Math.max(0,event.time-0.75)/tracks.value[index].duration
   cam.value='board'
   selections.value[index]=event.id
+  play()
 }
 function fit() {
   cam.value='board'
@@ -133,6 +146,18 @@ onBeforeUnmount(()=>{ ++job; stop() })
     <p v-if="!left||!right||leftId===rightId" class="notice">Choose two different saved experiments.</p>
     <p v-else-if="!horizon" class="notice">Complete a generation in each run to compare them.</p>
     <template v-else>
+      <section v-if="experimentSizes" class="comparison-size" aria-labelledby="comparison-size-title">
+        <h2 id="comparison-size-title">Average size over {{ horizon }} generations</h2>
+        <table>
+          <thead><tr><th scope="col">Run</th><th scope="col">Founders</th><th scope="col">Day {{ horizon }}</th><th scope="col">Change</th></tr></thead>
+          <tbody>
+            <tr v-for="(size,index) in experimentSizes" :key="index" :class="index===0?'run-left':'run-right'">
+              <th scope="row">{{ index===0?'Left':'Right' }}</th><td>{{ format(size.start) }}</td><td>{{ format(size.finish) }}</td>
+              <td>{{ size.change>0?'+':'' }}{{ format(size.change) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
       <div class="comparison-controls">
         <button class="icon" aria-label="Previous comparison day" :disabled="day<=1" @click="seekDay(day-1)"><ChevronLeft :size="21"/></button>
         <label>Day <input :value="day" type="number" min="1" :max="horizon" @change="changeDay"> of {{ horizon }}</label>
@@ -169,7 +194,7 @@ onBeforeUnmount(()=>{ ++job; stop() })
           Largest hunt gap · Day {{ largestHuntGap.day }} ({{ largestHuntGap.gap }})
         </button>
         <button v-for="(name,index) in names" :key="name" class="secondary" :disabled="!firstHunts[index]" @click="goToHunt(index)">
-          {{ index===0?'Left':'Right' }} first hunt<span v-if="firstHunts[index]">· {{ format(firstHunts[index].time) }} s</span>
+          Watch {{ index===0?'left':'right' }} hunt<span v-if="firstHunts[index]"> · {{ format(firstHunts[index].time) }} s</span>
         </button>
         <span v-if="tracks.length===2 && !firstHunts.some(Boolean)" class="quiet">No successful hunts on this day for this scope.</span>
       </div>

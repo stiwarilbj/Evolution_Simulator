@@ -382,7 +382,7 @@ export const useLab = defineStore('lab', () => {
     try { await saveRunPair(left, right) }
     catch { throw new Error('Could not save the experiment pair in this browser. Try again when local storage is available.') }
     library.value = [...library.value, left, right]
-    return { left:left.id, right:right.id, day:1 }
+    return { left:left.id, right:right.id, day:Math.min(last(left), last(right)) }
   }
 
   function getTrack(value, day) {
@@ -642,7 +642,12 @@ export const useLab = defineStore('lab', () => {
   }
 
   function resetDraft() {
-    if (draft.value) Object.assign(draft.value, JSON.parse(openingDraft))
+    if (!draft.value) return
+    const original = JSON.parse(openingDraft)
+    for (const key of Object.keys(draft.value)) {
+      if (!Object.hasOwn(original, key)) delete draft.value[key]
+    }
+    Object.assign(draft.value, original)
   }
 
   function closeSettings() {

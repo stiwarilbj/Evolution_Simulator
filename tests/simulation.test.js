@@ -8,6 +8,7 @@ import { dawn, dusk, founders, snapshot, step } from '../src/engine/simulation.j
 import { distribution } from '../src/engine/stats.js'
 import { prepareTrack, trackFrame } from '../src/track.js'
 import { csv } from '../src/export.js'
+import { sizeMutationPair } from '../src/experiments.js'
 
 test('live, partially saved, headless, and replay execution agree for every completed day', () => {
   const config = starter()
@@ -51,6 +52,26 @@ test('dawn balances all four edges, resets credits and capacity, and keys food b
   assert.deepEqual(field.plants, dawn(config, 1, opening).plants)
   assert.notDeepEqual(field.plants, dawn(config, 2, opening).plants)
   assert.notDeepEqual(field.plants, dawn({ ...config, seed: 99 }, 1, opening).plants)
+})
+
+test('video experiment settlers and their offspring start the next day at the same refuge', () => {
+  const [config] = sizeMutationPair(118, 600)
+  const first = dawn(config, 1, founders(config))
+  assert.ok(first.blobs.every(b => [b.x, b.y].some(value => value === 0 || value === 500)))
+  assert.equal(step(first, config, 12), null)
+  const saved = structuredClone(first)
+  const { checkpoint, summary } = step(first, config, Infinity)
+  assert.deepEqual(step(saved, config, Infinity, true), { checkpoint, summary })
+  assert.ok(summary.rows.all.births > 0)
+  const end = new Map(first.blobs.filter(b => b.home).map(b => [b.id, b.target]))
+  const next = dawn(config, 2, checkpoint)
+  for (const blob of next.blobs) {
+    const home = end.get(blob.age ? blob.id : blob.parent)
+    assert.deepEqual({ x: blob.x, y: blob.y }, home)
+    assert.equal(blob.credits, 0)
+    assert.equal(blob.energy, blob.capacity)
+  }
+  assert.notDeepEqual(first.plants.map(p => [p.x, p.y]), next.plants.map(p => [p.x, p.y]))
 })
 
 test('the hunt threshold is inclusive, same-species configurable, and hunting counts as food', () => {

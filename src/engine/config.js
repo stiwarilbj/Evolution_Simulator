@@ -6,6 +6,7 @@ export const VERSION = 4
 export const MAX_SEED = 0xffffffff
 export const endsWhenSettled = config => config.version >= SETTLED_RULE_VERSION && config.endMode === 'settled'
 export const usesStandardDeviation = config => config.version >= 4
+export const usesWalkthroughForaging = config => usesStandardDeviation(config) && config.foraging === 'walkthrough'
 
 export function speciesTemplate(id, name, color, count = 10, enabled = true, version = VERSION) {
   const spread = usesStandardDeviation({ version })
@@ -50,7 +51,8 @@ export function validate(config) {
   number('preyReward', 'Prey reward', config.preyReward, 0, 1000)
   if (!['prepare', 'live'].includes(config.mode) || !['linked', 'speed'].includes(config.stride) ||
       !['walkthrough', 'product', 'additive'].includes(config.metabolism) || typeof config.predation !== 'boolean' ||
-      typeof config.sameSpecies !== 'boolean') errors.rules = 'Choose supported simulation rules.'
+      typeof config.sameSpecies !== 'boolean' ||
+      (config.foraging !== undefined && !usesWalkthroughForaging(config))) errors.rules = 'Choose supported simulation rules.'
   if (!Array.isArray(config.schedule) || !['constant', 'ramp', 'step'].includes(config.scheduleMode)) {
     errors.schedule = 'Choose a supported food schedule.'
   } else {

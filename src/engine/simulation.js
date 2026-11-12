@@ -1,8 +1,9 @@
-import { endsWhenSettled, plantsForDay, TRAITS, usesStandardDeviation } from './config.js'
+import { endsWhenSettled, plantsForDay, TRAITS, usesStandardDeviation, usesWalkthroughForaging } from './config.js'
 import { random, normal, shuffle } from './random.js'
 import { summaries } from './stats.js'
+import { forage } from './foraging.js'
 import { FIELD, DT, WALKTHROUGH_STEP, Grid, clamp, radius, travel, cost, walkthroughStepCost,
-  canHunt, turn, homePoints, pathOf, contact } from './geometry.js'
+  canHunt, turn, edgePoint, homePoints, pathOf, contact } from './geometry.js'
 
 export const STATES = ['Searching', 'Foraging', 'Chasing', 'Fleeing', 'Returning', 'Home', 'Dead', 'Born']
 const MIN_POSITIVE_TRAIT = 2 ** -1022
@@ -17,31 +18,42 @@ export function founders(config) {
   return { roster, nextId: id }
 }
 
+function standardSpawn(blob, i, count, edges, seed, day) {
+  const edge = edges[i % 4], slot = Math.floor(i / 4), slots = Math.ceil((count - i % 4) / 4)
+  const along = clamp(25 + 450 * (slot + 0.1 + random(seed, 3, day, blob.id) * 0.8) / slots,
+    blob.r + 6, FIELD - blob.r - 6)
+  const inset = blob.r + 2
+  const [x, y, inward] = [[inset, along, 0], [FIELD - inset, along, Math.PI],
+    [along, inset, Math.PI / 2], [along, FIELD - inset, -Math.PI / 2]][edge]
+  const angle = inward + (random(seed, 4, day, blob.id) - 0.5) * Math.PI / 6
+  return { x, y, angle }
+}
+
 export function dawn(config, day, checkpoint) {
   const { roster, nextId } = checkpoint
   const walkthrough = config.metabolism === 'walkthrough'
+  const foraging = usesWalkthroughForaging(config)
   const stepSeconds = walkthrough ? WALKTHROUGH_STEP : DT
   const species = new Map(config.species.map(s => [s.id, s]))
-  const edges = shuffle([0, 1, 2, 3], config.seed, day, 2)
-  const blobs = shuffle(roster, config.seed, day, 1).map((original, i) => {
-    const edge = edges[i % 4], slot = Math.floor(i / 4), count = Math.ceil((roster.length - i % 4) / 4)
+  const edges = foraging ? null : shuffle([0, 1, 2, 3], config.seed, day, 2)
+  const blobs = (foraging ? roster : shuffle(roster, config.seed, day, 1)).map((original, i) => {
     const r = radius(original.size)
-    const along = clamp(25 + 450 * (slot + 0.1 + random(config.seed, 3, day, original.id) * 0.8) / count,
-      r + 6, FIELD - r - 6)
-    const inset = r + 2
-    const [x, y, inward] = [[inset, along, 0], [FIELD - inset, along, Math.PI],
-      [along, inset, Math.PI / 2], [along, FIELD - inset, -Math.PI / 2]][edge]
-    const angle = inward + (random(config.seed, 4, day, original.id) - 0.5) * Math.PI / 6
+    const position = foraging
+      ? { ...(original.edge ?? edgePoint(FIELD * random(config.seed, 3, day, original.id, 0),
+        FIELD * random(config.seed, 3, day, original.id, 1))), angle: 0 }
+      : standardSpawn({ id: original.id, r }, i, roster.length, edges, config.seed, day)
     const energy = species.get(original.species).energy
     const moveCost = walkthrough ? walkthroughStepCost(original, config) : null
-    return { ...original, r, x, y, angle, energy, capacity: energy, credits: 0, preyCredits: 0,
+    return { ...original, ...position, r, energy, capacity: energy, credits: 0, preyCredits: 0,
       state: 0, alive: true, home: false, returning: false, target: null,
       velocityX: 0, velocityY: 0, rate: walkthrough ? moveCost / stepSeconds : cost(original, config),
       speedWorld: travel(original, config), moveCost }
   })
-  blobs.sort((a, b) => a.id - b.id)
+  if (!foraging) blobs.sort((a, b) => a.id - b.id)
+  const margin = foraging ? 0 : 12
+  const width = FIELD - 2 * margin
   const plants = Array.from({ length: plantsForDay(config, day) }, (_, id) => ({
-    id, x: 12 + 476 * random(config.seed, 5, day, id, 0), y: 12 + 476 * random(config.seed, 5, day, id, 1), eaten: false,
+    id, x: margin + width * random(config.seed, 5, day, id, 0), y: margin + width * random(config.seed, 5, day, id, 1), eaten: false,
   }))
   const limit = endsWhenSettled(config) ? null : Math.round(config.duration / 10 / stepSeconds)
   return { day, tick: 0, stepSeconds, limit,
@@ -57,6 +69,21 @@ function kill(ctx, blob, time, cause, extra) {
   blob.alive = false
   blob.state = 6
   record(ctx, blob, time, 'death', { cause, ...extra })
+}
+
+function eat(ctx, config, blob, target, time, type) {
+  const beforeEnergy = blob.energy
+  const extra = { target: target.id, beforeEnergy }
+  if (type === 'plant') {
+    target.eaten = true
+    blob.energy = Math.min(blob.capacity, blob.energy + config.plantReward)
+  } else {
+    blob.preyCredits++
+    blob.energy = Math.min(blob.capacity, blob.energy + config.preyReward)
+    extra.targetSpecies = target.species
+  }
+  blob.credits++
+  record(ctx, blob, time, type, extra)
 }
 
 function nearest(blob, candidates, eligible) {
@@ -235,19 +262,11 @@ function tick(ctx, config) {
       b.state = 5
       record(ctx, b, time, 'home')
     } else if (kind === 1 && !target.eaten) {
-      target.eaten = true
-      b.credits++
-      const beforeEnergy = b.energy
-      b.energy = Math.min(b.capacity, b.energy + config.plantReward)
-      record(ctx, b, time, 'plant', { target: target.id, beforeEnergy })
+      eat(ctx, config, b, target, time, 'plant')
     } else if (kind === 2 && charge(target, t)) {
       const victim = target.blob
       kill(ctx, victim, time, 'Predation', { target: b.id })
-      b.credits++
-      b.preyCredits++
-      const beforeEnergy = b.energy
-      b.energy = Math.min(b.capacity, b.energy + config.preyReward)
-      record(ctx, b, time, 'prey', { target: victim.id, targetSpecies: victim.species, beforeEnergy })
+      eat(ctx, config, b, victim, time, 'prey')
     }
   }
   for (const path of paths.values()) {
@@ -264,13 +283,15 @@ export function step(ctx, config, count = 1, skipIdle = false) {
   const limit = stepLimit(ctx, config)
   const stop = Math.min(limit, ctx.tick + count)
   const hasActive = () => ctx.blobs.some(b => b.alive && !b.home)
+  const foraging = usesWalkthroughForaging(config)
   while (ctx.tick < stop) {
     if ((ctx.limit == null || skipIdle) && !hasActive()) {
       if (ctx.limit == null) break
       ctx.tick = stop
       break
     }
-    tick(ctx, config)
+    if (foraging) forage(ctx, config, record, kill, eat)
+    else tick(ctx, config)
   }
   return ctx.tick === limit || (ctx.limit == null && !hasActive()) ? dusk(ctx, config) : null
 }
@@ -281,6 +302,7 @@ export function dusk(ctx, config) {
   const time = (ctx.limit ?? ctx.tick) * (ctx.stepSeconds ?? DT)
   const species = new Map(config.species.map(s => [s.id, s]))
   const standard = usesStandardDeviation(config)
+  const foraging = usesWalkthroughForaging(config)
   for (const b of ctx.blobs) {
     if (!b.alive) continue
     if (!b.credits || !b.home) {
@@ -289,7 +311,8 @@ export function dusk(ctx, config) {
     }
     const survivor = { id: b.id, species: b.species, parent: b.parent, born: b.born,
       age: ++b.age, speed: b.speed, size: b.size, sense: b.sense }
-    closing.push(survivor)
+    if (foraging) survivor.edge = b.target
+    if (!foraging || b.credits < 2) closing.push(survivor)
     if (b.credits < 2) continue
     const settings = species.get(b.species)
     const child = { ...survivor, age: 0, id: ctx.nextId++, parent: b.id, born: ctx.day }
@@ -300,6 +323,7 @@ export function dusk(ctx, config) {
       child[trait] = Math.max(minimum, b[trait] + deviation * normal(config.seed, ctx.day, child.id, index))
     }
     closing.push(child)
+    if (foraging) closing.push(survivor)
     const newborn = { ...child, x: b.x, y: b.y, angle: b.angle, r: radius(child.size),
       capacity: settings.energy, energy: settings.energy, credits: 0, preyCredits: 0, state: 7, alive: true }
     record(ctx, newborn, time, 'birth', { parent: b.id })

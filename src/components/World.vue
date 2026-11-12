@@ -4,9 +4,9 @@ import { Aperture, BatteryMedium, ChevronDown, ChevronLeft, ChevronRight, Chevro
   Eye, FastForward, Layers, Pause, Play, Rabbit, RotateCcw, StepForward, Utensils, Video, X } from 'lucide-vue-next'
 import { useLab } from '../store.js'
 import { STATES } from '../engine/simulation.js'
-import { rulesFor } from '../engine/config.js'
+import { rulesFor, usesWalkthroughForaging } from '../engine/config.js'
 import { format } from '../engine/stats.js'
-import { cost, homePoints, radius, travel, walkthroughStepCost } from '../engine/geometry.js'
+import { cost, edgePoint, homePoints, radius, travel, walkthroughStepCost } from '../engine/geometry.js'
 import Board from './Board.vue'
 import Flower from './Flower.vue'
 import Ribbon from './Ribbon.vue'
@@ -29,6 +29,12 @@ const visible = computed(() => lab.frame?.blobs.find(b => b.id===lab.selected))
 const creatureState = computed(() => STATES[visible.value?.state])
 const species = computed(() => lab.run.setup.species.find(s => s.id===visible.value?.species))
 const rules = computed(() => rulesFor(lab.run.setup,lab.run.revisions,lab.frame?.day ?? lab.viewing))
+const refugeDistance = computed(() => {
+  const blob = visible.value
+  if (!usesWalkthroughForaging(rules.value)) return homePoints(blob)[0].distance
+  const edge = edgePoint(blob.x, blob.y)
+  return Math.hypot(blob.x - edge.x, blob.y - edge.y)
+})
 const movementCost = computed(() => {
   const blob = visible.value
   if (!blob) return ''
@@ -236,7 +242,7 @@ defineExpose({ select, overhead })
         </select></label>
         <template v-if="visible">
           <p>{{ creatureState }} <span v-if="!visible.alive">· {{ creatureEvents.find(e=>e.type==='death')?.cause }}</span></p>
-          <p v-if="creatureState === 'Returning'" class="quiet">{{ format(homePoints(visible)[0].distance,1) }} units from the nearest refuge</p>
+          <p v-if="creatureState === 'Returning'" class="quiet">{{ format(refugeDistance,1) }} units from the nearest refuge</p>
           <progress :value="visible.energy" :max="visible.capacity" aria-label="Remaining energy"></progress>
           <small>{{ format(visible.energy,1) }} / {{ visible.capacity }} energy</small>
           <dl><template v-for="[name,value] in [

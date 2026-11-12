@@ -58,3 +58,7 @@
 - New setups use the original engine’s hunting rule. Prey can be at most 80% of the hunter’s size. Older setups and replays keep the 20% rule.
 - New setups end the day when all blobs are home or dead. Fixed time remains available. Runs stop at extinction, and the ribbon tile opens the last scene.
 - Added seed 118 and size settings of 1.00 and 0.50 to the paired experiment. New setups use standard deviation for mutations and let traits evolve below 1. Saved runs keep their original rules.
+
+## 2026-11-12
+
+- Rebuilt the video’s 600-generation size experiment around step-by-step foraging and inherited refuges. In Chromium with seed 118, average size drops from 10 to 7.37 in the wide run and 6.95 in the narrow run. Compare opens at Day 600 with both results and hunt replays.

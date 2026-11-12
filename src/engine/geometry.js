@@ -22,6 +22,14 @@ export function turn(from, to) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from))
 }
 
+export function edgePoint(x, y) {
+  const side = Math.min(y, FIELD - x, FIELD - y, x)
+  if (side === y) return { x, y: 0 }
+  if (side === FIELD - x) return { x: FIELD, y }
+  if (side === FIELD - y) return { x, y: FIELD }
+  return { x: 0, y }
+}
+
 export function homePoints(blob) {
   const edge = blob.r + 6
   return [
