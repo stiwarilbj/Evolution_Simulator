@@ -259,8 +259,10 @@ function project(x, y, z, view) {
 
 function spotlight(blob, view) {
   // Clip the floor circle before projection so a radius crossing the camera stays convex.
+  // Raise the close-up opening enough to light the creature's face.
+  const lift = props.camera === 'close' && blob.sense < 10 ? blob.r * 1.05 : 0
   const rim = visionRim.map(([x, z]) => new THREE.Vector3(
-    blob.x - 250 + x * blob.sense, 0, blob.y - 250 + z * blob.sense).applyMatrix4(view.matrixWorldInverse))
+    blob.x - 250 + x * blob.sense, lift, blob.y - 250 + z * blob.sense).applyMatrix4(view.matrixWorldInverse))
   const near = -view.near
   const clipped = []
   for (let i = 0; i < rim.length; i++) {
@@ -449,10 +451,11 @@ function draw(now) {
         followed = true
       }
       const x = blob.x-250, z = blob.y-250, c = Math.cos(blob.angle), s = Math.sin(blob.angle)
-      const distance = Math.max(84, blob.r * 6)
+      const close = props.camera === 'close'
+      const distance = Math.max(close ? 30 : 84, blob.r * 6)
       const lookAhead = clamp((width - 270) / 48, 0, 20)
-      position.set(x+distance*(.19*c+.98*s),Math.max(32,blob.r*3.1),z+distance*(.19*s-.98*c))
-      aim.set(x+c*lookAhead,Math.max(13,blob.r*1.65),z+s*lookAhead)
+      position.set(x+distance*(.19*c+.98*s),Math.max(close ? 21 : 32,blob.r*3.1),z+distance*(.19*s-.98*c))
+      aim.set(x+c*(close ? 2 : lookAhead),Math.max(close ? 2 : 13,blob.r*1.65),z+s*(close ? 2 : lookAhead))
       const ease = reduced.matches ? 1 : 1 - Math.exp(-delta / 135)
       camera.position.lerp(position,ease)
       target.lerp(aim,ease)
@@ -591,7 +594,7 @@ defineExpose({ fit:resetView })
 </script>
 <template>
   <div ref="host" class="board">
-    <svg v-if="followedBlob && layers?.vision" class="vision-mask" aria-hidden="true">
+    <svg v-if="followedBlob && layers?.vision" class="vision-mask" :class="{ 'close-vision':props.camera==='close' }" aria-hidden="true">
       <path ref="visionMask" fill-rule="evenodd" transform="translate(42 42)"/>
     </svg>
     <CreatureThought v-if="followedBlob" ref="cloud" :id="followedBlob.id" :state="followedBlob.state"/>

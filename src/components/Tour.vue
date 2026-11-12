@@ -7,7 +7,7 @@ import { founders } from '../engine/simulation.js'
 import { trackFrame } from '../track.js'
 import { useLab } from '../store.js'
 
-const emit=defineEmits(['close','world'])
+const emit=defineEmits(['close','world','walkthrough'])
 const dialog=ref(), step=ref(0), track=shallowRef(null), time=ref(0), chosen=ref(null), issue=ref('')
 const playing=ref(false), lab=useLab(), setup=starter()
 const source={id:'intro-demo',setup,revisions:[],checkpoints:[{day:0,...founders(setup)}]}
@@ -55,9 +55,9 @@ function jump() {
     Math.max(0,(home?.time ?? 3)-.9),track.value.duration,0][step.value]
 }
 watch(step,()=>{stop();jump()})
-function close(world=false) {
+function close(destination='close') {
   try { localStorage.setItem('evolution.tour','seen') } catch {}
-  emit(world?'world':'close')
+  emit(destination)
 }
 onMounted(async ()=>{
   dialog.value.showModal()
@@ -84,8 +84,9 @@ onBeforeUnmount(()=>{closed=true;stop()})
     <p>{{ chapters[step][1] }}</p>
     <footer>
       <button class="link" @click="close()">Skip</button>
+      <button v-if="step===0" class="link" @click="close('walkthrough')">Video walkthrough</button>
       <button class="secondary" :disabled="step===0" @click="step--">Back</button>
-      <button class="primary" @click="step===5?close(true):step++">{{ step===0?'Get started':step===5?'Open World':'Next' }}</button>
+      <button class="primary" @click="step===5?close('world'):step++">{{ step===0?'Get started':step===5?'Open World':'Next' }}</button>
     </footer>
   </dialog>
 </template>

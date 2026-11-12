@@ -1,27 +1,42 @@
 <script setup>
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useLab } from '../store.js'
 import { MAX_SEED } from '../engine/config.js'
+import { walkthroughStepCost } from '../engine/geometry.js'
 import { experiments, setupFor, sizeMutationPair, SIZE_MUTATION_DAYS, SIZE_MUTATION_SEED } from '../experiments.js'
+import { lessons, videoAt } from '../guide.js'
+import finches from '../assets/guide-finches.webp'
+import primer from '../assets/guide-primer.webp'
+import primerOverhead from '../assets/guide-primer-overhead.webp'
+import primerClose from '../assets/guide-primer-close.webp'
+import host from '../assets/guide-host.webp'
+import StrideRace from './StrideRace.vue'
+
 const lab=useLab()
-const emit=defineEmits(['world','compare'])
-const chapter=ref(0), video=ref('')
+const props=defineProps({ lesson:String })
+const emit=defineEmits(['world','compare','lesson','example','trends'])
+const chapter=computed(()=>Math.max(0,lessons.findIndex(item=>item.id===props.lesson)))
+const current=computed(()=>lessons[chapter.value])
+const slide=ref(0), video=ref('')
 const pairSeed=ref(SIZE_MUTATION_SEED), pairDays=ref(SIZE_MUTATION_DAYS), pairProgress=ref(null), pairMessage=ref('')
 let pairController
-const chapters=[
-  ['The field','The tabletop is a 500-unit square. Pellets and creatures occupy the same flat plane.'],
-  ['Follow a creature','Select a blob to see its eyes, thought bubble, and individual trait flower.'],
-  ['Sight','The Eye layer shows the distance at which a creature can sense plants and other creatures.'],
-  ['Speed','The Runner layer maps slow bodies to brown and faster ones to red. Faster strides use more energy.'],
-  ['Energy','By default, each move costs energy equal to size cubed times movement speed squared, plus sight range, divided by 10,000. Movement speed is measured in units per 0.1-second step.'],
-  ['Predation','In new setups, prey can be at most 80% of the hunter’s size. A blob of size 12.5 can eat a blob of size 10.'],
-  ['Getting home','A plant or prey gives one food credit. By default, energy refills at dawn. Return to the edge with one credit to survive or two to have one offspring.'],
-  ['Extinction','By default, a day ends when every blob has reached refuge or died. If no blobs survive, the run ends and the ribbon shows an extinction tile.'],
-  ['Inheritance','A newborn samples each enabled trait from a normal distribution centered on its parent.'],
-  ['Read a flower','A flower combines the day’s mean traits and its closing population.'],
-  ['Trends','Percentiles, extrema, birth and death counts, and supply reveal change across generations.'],
-  ['Compare experiments','Run the same seed with a different size mutation spread or food schedule and compare the two archives.'],
+const opening=[
+  { image:finches, title:'Finches', alt:'Four finch profiles with deep, pointed, and curved beaks',
+    caption:'Different beaks work better for different foods.' },
+  { image:primer, title:'Primer', alt:'Blue, yellow, green and orange clay blobs gather around food on a white table',
+    montage:[
+      { image:primerOverhead, alt:'Clay blobs scattered across a white tabletop seen from above' },
+      { image:primerClose, alt:'Three clay blobs reach for a pile of food' },
+    ],
+    caption:'Primer used simple animated creatures to show how natural selection works.' },
+  { image:host, title:'The host', alt:'Hand-drawn science host with round glasses and open hands',
+    caption:'Now try the idea yourself. Follow a creature and see what it takes to survive.' },
 ]
+const exampleCost = size => walkthroughStepCost({ size, speed:10, sense:20 }, { stride:'linked' }).toFixed(3)
+function selectChapter(index) {
+  const entry = lessons[index]
+  if (entry) emit('lesson',entry.id)
+}
 
 async function runPair() {
   if (pairProgress.value) return
@@ -54,10 +69,44 @@ onBeforeUnmount(() => pairController?.abort())
     <div class="about-actions"><button class="primary" @click="emit('world')">Open World</button><button class="secondary" @click="lab.modal='tour'">Show tour</button></div>
     <section class="lesson">
       <h2>Walkthrough</h2>
-      <div class="chapter-list"><button v-for="([title],i) in chapters" :key="title" class="secondary" :aria-pressed="chapter===i" @click="chapter=i">{{ String(i+1).padStart(2,'0') }} {{ title }}</button></div>
-      <h3>{{ chapters[chapter][0] }}</h3><p>{{ chapters[chapter][1] }}</p>
-      <div class="about-actions"><button class="secondary" :disabled="chapter===0" @click="chapter--">Back</button>
-        <button class="secondary" :disabled="chapter===chapters.length-1" @click="chapter++">Next</button><button class="link" @click="emit('world')">Try it in World</button></div>
+      <div class="chapter-list" aria-label="Walkthrough chapters"><button v-for="(entry,i) in lessons" :key="entry.id"
+        class="secondary" :aria-pressed="chapter===i" @click="selectChapter(i)">{{ entry.title }}</button></div>
+      <article class="chapter-panel" :key="current.id">
+        <header class="chapter-card"><h3>{{ current.title }}</h3></header>
+        <div v-if="current.id==='opening'" class="opening-slides">
+          <figure>
+            <img :src="opening[slide].image" :alt="opening[slide].alt" width="1200" height="263">
+            <div v-if="opening[slide].montage" class="opening-montage">
+              <img v-for="still in opening[slide].montage" :key="still.image" :src="still.image" :alt="still.alt" width="680" height="325">
+            </div>
+            <figcaption>{{ opening[slide].caption }}</figcaption>
+          </figure>
+          <div class="opening-tabs" aria-label="Opening illustrations">
+            <button v-for="(scene,index) in opening" :key="scene.title" class="secondary" :aria-pressed="slide===index"
+              @click="slide=index">{{ scene.title }}</button>
+          </div>
+        </div>
+        <StrideRace v-if="current.id==='stride'"/>
+        <div v-if="current.id==='energy'" class="energy-cutaway">
+          <div>
+            <h4>What helps find food</h4>
+            <ul><li>Better sight</li><li>Longer strides</li><li>Hunting smaller blobs</li></ul>
+          </div>
+          <div>
+            <h4>Energy spent per move</h4>
+            <p class="guide-formula">(size³ × distance per step² + sight) ÷ 10,000</p>
+            <p>At speed 10 and sight 20, a size-10 blob spends <b>{{ exampleCost(10) }}</b> energy per step. A size-12 blob spends <b>{{ exampleCost(12) }}</b>.</p>
+          </div>
+        </div>
+        <p class="chapter-text">{{ current.text }}</p>
+      </article>
+      <div class="about-actions">
+        <button class="secondary" :disabled="chapter===0" @click="selectChapter(chapter-1)">Back</button>
+        <button class="secondary" :disabled="chapter===lessons.length-1" @click="selectChapter(chapter+1)">Next</button>
+        <button v-if="current.example" class="primary" @click="emit('example',current.example)">Try it in World</button>
+        <button v-else class="primary" @click="emit('trends')">Open Trends</button>
+        <a class="lesson-source" :href="videoAt(current.timestamp)" target="_blank" rel="noreferrer">Watch this part of the video</a>
+      </div>
     </section>
     <section class="reference-videos">
       <div v-for="[id,title,credit] in [['6nMo8T3T0L4','Interactive Evolution Simulator','MinuteLabs · Jasper Palfree · art direction by Sarah Berman'],['0ZGbIKd0XrM','Simulating Natural Selection','Primer']]" :key="id">

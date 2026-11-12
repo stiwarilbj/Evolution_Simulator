@@ -4,6 +4,7 @@ import { ChevronDown, X } from 'lucide-vue-next'
 import { useLab } from './store.js'
 import { randomSeed, validate } from './engine/config.js'
 import { setupFromLink } from './export.js'
+import { guidedExamples, lessons } from './guide.js'
 import World from './components/World.vue'
 const Trends=defineAsyncComponent(()=>import('./components/Trends.vue'))
 const Settings=defineAsyncComponent(()=>import('./components/Settings.vue'))
@@ -11,15 +12,19 @@ const About=defineAsyncComponent(()=>import('./components/About.vue'))
 const RunDialog=defineAsyncComponent(()=>import('./components/RunDialog.vue'))
 const Compare=defineAsyncComponent(()=>import('./components/Compare.vue'))
 const Tour=defineAsyncComponent(()=>import('./components/Tour.vue'))
+const GuidedWorld=defineAsyncComponent(()=>import('./components/GuidedWorld.vue'))
 
 const lab = useLab()
 const pages = { viewer:'World', stats:'Trends', about:'About', compare:'Compare' }
 const runAddress = /^#\/r\/([^/]+)\/s\/(\d+)\/(viewer|stats|about|compare)(\?.*)?$/
 const initialAddress = location.hash.match(runAddress)
 const initialPage = initialAddress?.[3] ?? 'viewer'
+const initialQuery = new URLSearchParams(initialAddress?.[4])
 const page = ref(initialPage), ready = ref(false), menu = ref(false), world = ref(), menuButton = ref(), mainSurface = ref()
 const fullscreenSurface = ref(null)
-const comparison = ref(readComparison(new URLSearchParams(initialAddress?.[4])))
+const comparison = ref(readComparison(initialQuery))
+const example = ref(initialPage==='viewer' ? knownExample(initialQuery.get('example')) : null)
+const lesson = ref(readLesson(initialQuery))
 const comparisonVersion = ref(0), visited = ref({ viewer:true,[initialPage]:true })
 const scrolls = new Map()
 let navigating = false, routeRequest = 0, retryNavigation, sharedSetupHash
@@ -27,7 +32,9 @@ let navigating = false, routeRequest = 0, retryNavigation, sharedSetupHash
 function readComparison(query) {
   return { left:query.get('left'), right:query.get('right'), day:Number(query.get('pairDay')) || null }
 }
-function address(view = page.value, day = lab.viewing, settings = lab.settings) {
+function knownExample(id) { return Object.hasOwn(guidedExamples,id) ? id : null }
+function readLesson(query) { return lessons.find(item=>item.id===query.get('lesson'))?.id ?? 'opening' }
+function address(view = page.value, day = lab.viewing, settings = lab.settings, guided = example.value) {
   if (!lab.run) return '#/'
   const query = new URLSearchParams()
   if (view==='compare') {
@@ -36,6 +43,8 @@ function address(view = page.value, day = lab.viewing, settings = lab.settings) 
     if (right != null) query.set('right',right)
     if (pairDay) query.set('pairDay',pairDay)
   }
+  if (view==='viewer' && guided) query.set('example',guided)
+  if ((view==='about' || view==='viewer' && guided) && lesson.value!=='opening') query.set('lesson',lesson.value)
   if (settings) query.set('cfg','1')
   return '#/r/'+lab.run.id+'/s/'+day+'/'+view+(query.size ? '?'+query : '')
 }
@@ -71,13 +80,19 @@ function beginNavigation() {
   navigating = false
   return ++routeRequest
 }
-function go(view) {
-  const changed = view !== page.value
+function go(view, guided = null) {
+  const changed = view !== page.value || guided !== example.value
   beginNavigation()
+  if (guided) lab.stopPlayback()
+  example.value = guided
   show(view)
   menu.value = false
   if (changed) history.pushState(null,'',address())
   else if (lab.run) history.replaceState(null,'',address())
+}
+function changeLesson(id) {
+  lesson.value = id
+  if (page.value==='about') syncAddress()
 }
 async function applyAddress(hash = location.hash) {
   const token = beginNavigation()
@@ -118,6 +133,9 @@ async function applyAddress(hash = location.hash) {
       comparison.value = readComparison(query)
       comparisonVersion.value++
     }
+    example.value = match[3]==='viewer' ? knownExample(query.get('example')) : null
+    if (example.value) lab.stopPlayback()
+    if (match[3]==='about' || example.value) lesson.value = readLesson(query)
     show(match[3])
     if (query.get('cfg')==='1' && !lab.settings) lab.openSettings()
     else if (query.get('cfg')!=='1' && lab.settings) lab.closeSettings()
@@ -143,7 +161,8 @@ async function watchDay(day, id, { sense = false, atEnd = false } = {}) {
     if (!current()) return
     if (day > lab.completed && lab.replay) lab.goLive()
     if (id != null && lab.frame?.blobs.some(blob => blob.alive && blob.id === id)) world.value?.select(id)
-    const changed = page.value !== 'viewer'
+    const changed = page.value !== 'viewer' || example.value !== null
+    example.value = null
     show('viewer')
     if (changed) history.pushState(null,'',address())
     else history.replaceState(null,'',address())
@@ -196,6 +215,7 @@ async function openRun(value, view) {
   navigating = true
   try {
     if (await lab.switchRun(value, current) && current()) {
+      example.value = null
       show(view)
       history.pushState(null,'',address())
     }
@@ -206,6 +226,7 @@ async function openRun(value, view) {
 watch(() => [lab.run?.id,lab.viewing,lab.settings], ([id], [previousId]) => {
   if (!ready.value || navigating || !id) return
   if (id!==previousId) {
+    example.value = null
     show('viewer')
     history.pushState(null,'',address())
   } else syncAddress()
@@ -236,13 +257,13 @@ onUnmounted(() => {
   <a class="skip-link" href="#main-surface" @click.prevent="skipToContent">Skip to content</a>
   <header class="app-header">
     <nav aria-label="Main navigation" :inert="!ready">
-      <a class="brand" :href="address('viewer')" aria-label="Evolution Simulator home" @click.prevent="go('viewer')">
+      <a class="brand" :href="address('viewer',lab.viewing,lab.settings,null)" aria-label="Evolution Simulator home" @click.prevent="go('viewer')">
         <svg viewBox="0 0 30 30" width="30" height="30" fill="none" aria-hidden="true">
           <path d="M8.1 11.1C9.3 5.5 12.1 2.9 16.3 3.8c3 .6 4.5 2.8 4.8 5.2.2 1.4 1 2.5 2.7 4.7 4.6 6.1.6 12.4-7.4 12.6C7.3 26.5 3.9 22.4 5.6 17.1c.6-1.8 1.9-4.2 2.5-6Z" stroke="currentColor" stroke-width="1.6"/>
           <circle cx="16" cy="11.2" r="1.05" fill="currentColor"/><circle cx="20" cy="13.2" r=".85" fill="currentColor"/>
         </svg>
       </a>
-      <a v-for="view in ['about','viewer','stats']" :key="view" :href="address(view)" :aria-current="page===view?'page':undefined"
+      <a v-for="view in ['about','viewer','stats']" :key="view" :href="address(view,lab.viewing,lab.settings,null)" :aria-current="page===view?'page':undefined"
         @click.prevent="go(view)">{{ pages[view] }}</a>
       <a v-if="page==='compare'" :href="address('compare')" aria-current="page" @click.prevent>Compare</a>
     </nav>
@@ -272,15 +293,18 @@ onUnmounted(() => {
       <button v-else class="icon" aria-label="Dismiss error" @click="lab.error=''"><X :size="17"/></button>
     </div>
   </Teleport>
-  <div id="main-surface" ref="mainSurface" :class="{ 'reading-surface':page!=='viewer' }" tabindex="-1" :inert="!ready">
+  <div id="main-surface" ref="mainSurface" :class="{ 'reading-surface':page!=='viewer' || example }" tabindex="-1" :inert="!ready">
     <template v-if="lab.run">
-      <World v-show="page==='viewer'" ref="world" @reroll="reroll" @fullscreen-change="fullscreenSurface=$event"/>
+      <World v-show="page==='viewer' && !example" ref="world" @reroll="reroll" @fullscreen-change="fullscreenSurface=$event"/>
+      <GuidedWorld v-if="page==='viewer' && example" :example="example" @exit="go('about')"/>
       <Trends v-if="visited.stats" v-show="page==='stats'" :active="page==='stats'"
         @watch="watchDay" @sense="showSense" @restart="settings(lab.run.setup)" @reroll="reroll"/>
-      <About v-if="page==='about'" @world="go('viewer')" @compare="openComparison"/>
+      <About v-if="page==='about'" :lesson="lesson" @lesson="changeLesson" @example="go('viewer',$event)"
+        @world="go('viewer')" @trends="go('stats')" @compare="openComparison"/>
       <Compare v-if="page==='compare'" :key="comparisonVersion" :initial="comparison" @change="comparisonChanged" @library="task('library')"/>
       <Settings v-if="lab.settings"/>
-      <Tour v-if="lab.modal==='tour'" @close="lab.modal=null" @world="lab.modal=null; go('viewer')"/>
+      <Tour v-if="lab.modal==='tour'" @close="lab.modal=null" @world="lab.modal=null; go('viewer')"
+        @walkthrough="lab.modal=null; lesson='opening'; go('about')"/>
       <RunDialog v-else-if="lab.modal && !lab.settings" @compare="compare" @watch="watchDay" @world="go('viewer')"
         @resume="openRun($event, 'viewer')" @results="openRun($event, 'stats')"/>
     </template>
