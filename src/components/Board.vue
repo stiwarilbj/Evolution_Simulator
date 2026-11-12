@@ -7,7 +7,7 @@ import CreatureThought from './CreatureThought.vue'
 
 const props = defineProps({
   frame: Object, species: Array, layers: Object, selected: Number, follow: Boolean, camera: String,
-  scope: String, dim: Boolean, quality: String, speedRange: Object
+  scope: String, dim: Boolean, quality: String, speedRange: Object, tabletop: Boolean
 })
 const emit = defineEmits(['select', 'fallback'])
 const host = ref(null), cloud = ref(null), visionMask = ref(null)
@@ -25,7 +25,8 @@ overhead.lookAt(0, 0, 0)
 const target = new THREE.Vector3(), aim = new THREE.Vector3(), position = new THREE.Vector3()
 const originalPosition = new THREE.Vector3(), originalTarget = new THREE.Vector3()
 const stamp = new THREE.Object3D(), color = new THREE.Color()
-const slow = new THREE.Color('#7E635D'), fast = new THREE.Color('#C92922')
+// Sample the original Lab gradient, including its middle tones.
+const speedPalette = ['#7E635D', '#945A4F', '#A74E40', '#B93F31', '#C92922'].map(fill => new THREE.Color(fill))
 const mutedBody = new THREE.Color('#B7B7B7'), deadBody = new THREE.Color('#B9B9B9')
 const energyLow = new THREE.Color('#CCCCCC'), energyFull = new THREE.Color('#FDDE3B')
 const cast = new THREE.Raycaster()
@@ -172,8 +173,11 @@ function activeBlobs(frame, now) {
 }
 
 function paintColor(b, min, max) {
-  if (props.layers?.speed) color.copy(slow).lerp(fast, max === min ? .5 : clamp((b.speed - min) / (max - min), 0, 1))
-  else color.set(colors.get(b.species) ?? '#406780')
+  if (props.layers?.speed) {
+    const stop = (max === min ? .5 : clamp((b.speed - min) / (max - min), 0, 1)) * (speedPalette.length - 1)
+    const index = Math.min(Math.floor(stop), speedPalette.length - 2)
+    color.copy(speedPalette[index]).lerp(speedPalette[index+1], stop-index)
+  } else color.set(colors.get(b.species) ?? '#406780')
   if (props.dim && props.scope !== 'all' && b.species !== props.scope) color.lerp(mutedBody, .72)
   if (!b.alive) color.lerp(deadBody, .52)
   return color
@@ -200,7 +204,8 @@ function draw3d(blobs, frame, view, { min, max }) {
   const vision = buffer('vision', sight.length)
   const energy = buffer('energy', props.layers?.energy ? indicators.length : 0)
   const credit = buffer('credits', props.layers?.credits ? indicators.reduce((n,b) => n + b.credits, 0) : 0)
-  const outlines = [chosen,blobs.find(b=>b.id===hovered.value && b.id!==chosen?.id)].filter(Boolean)
+  const outlines = [props.tabletop && props.follow ? null : chosen,
+    blobs.find(b=>b.id===hovered.value && b.id!==chosen?.id)].filter(Boolean)
   const ring = buffer('ring', outlines.length)
   let eyes = 0, deaths = 0, pips = 0
   bodyIds = []
@@ -341,7 +346,7 @@ function draw2d(blobs, frame, view, { min, max }) {
     }
     softShadow(q.x+r*.42,q.y+r*.09,r*1.7,r*(overheadView?1.12:.51))
     if (props.layers?.energy && eligible(b)) ellipse(q.x,q.y,r*1.46,r*.43,b.energy/b.capacity>.45?'#F4DF86':'#CCCCCC')
-    if (b.id === props.selected) {
+    if (b.id === props.selected && !(props.tabletop && props.follow)) {
       ctx.beginPath()
       ctx.ellipse(q.x,q.y,r*1.47,r*.48,0,0,Math.PI*2)
       ctx.strokeStyle='#33786D'
@@ -409,8 +414,14 @@ function fit() {
   overhead.bottom = -units
   overhead.updateProjectionMatrix()
   const zoom = Math.max(1, height / width * 1.28)
-  originalPosition.set(600*zoom,300*zoom,600*zoom)
-  originalTarget.set(0, width < 700 ? 18 : height < 500 ? 13 : 26, 0)
+  if (props.tabletop) {
+    const compact = width < 400 && height < 330
+    originalPosition.set(-300,520,720).multiplyScalar(compact ? zoom * 1.12 : zoom)
+    originalTarget.set(0, compact ? 34 : width < 700 ? 60 : 20, 0)
+  } else {
+    originalPosition.set(600,300,600).multiplyScalar(zoom)
+    originalTarget.set(0, width < 700 ? 18 : height < 500 ? 13 : 26, 0)
+  }
   if (!manual && !followed) {
     camera.position.copy(originalPosition)
     target.copy(originalTarget)
@@ -452,10 +463,15 @@ function draw(now) {
       }
       const x = blob.x-250, z = blob.y-250, c = Math.cos(blob.angle), s = Math.sin(blob.angle)
       const close = props.camera === 'close'
-      const distance = Math.max(close ? 30 : 84, blob.r * 6)
+      const distance = Math.max(close ? 30 : props.tabletop ? 100 : 84, blob.r * 6)
       const lookAhead = clamp((width - 270) / 48, 0, 20)
-      position.set(x+distance*(.19*c+.98*s),Math.max(close ? 21 : 32,blob.r*3.1),z+distance*(.19*s-.98*c))
-      aim.set(x+c*(close ? 2 : lookAhead),Math.max(close ? 2 : 13,blob.r*1.65),z+s*(close ? 2 : lookAhead))
+      if (props.tabletop) {
+        position.set(x-distance*(.87*c+.49*s),Math.max(39,blob.r*3.1),z-distance*(.87*s-.49*c))
+        aim.set(x,Math.max(11,blob.r*1.65),z)
+      } else {
+        position.set(x+distance*(.19*c+.98*s),Math.max(close ? 21 : 32,blob.r*3.1),z+distance*(.19*s-.98*c))
+        aim.set(x+c*(close ? 2 : lookAhead),Math.max(close ? 2 : 13,blob.r*1.65),z+s*(close ? 2 : lookAhead))
+      }
       const ease = reduced.matches ? 1 : 1 - Math.exp(-delta / 135)
       camera.position.lerp(position,ease)
       target.lerp(aim,ease)
@@ -572,7 +588,7 @@ function setupRenderer() {
   raf = requestAnimationFrame(draw)
 }
 watch(() => props.species, list => { for (const s of list ?? []) colors.set(s.id,s.color); dirty = true }, { immediate:true })
-watch(() => [props.layers,props.camera,props.follow,props.selected,props.dim,props.scope,props.quality], () => { dirty = true }, { deep:true })
+watch(() => [props.layers,props.camera,props.follow,props.selected,props.dim,props.scope,props.speedRange], () => { dirty = true }, { deep:true })
 watch(() => props.quality, () => { if (canvas) fit() })
 onMounted(setupRenderer)
 onBeforeUnmount(() => {

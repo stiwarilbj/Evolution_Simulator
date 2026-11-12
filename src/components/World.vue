@@ -5,7 +5,7 @@ import { Aperture, BatteryMedium, ChevronDown, ChevronLeft, ChevronRight, Chevro
 import { useLab } from '../store.js'
 import { STATES } from '../engine/simulation.js'
 import { rulesFor, usesWalkthroughForaging } from '../engine/config.js'
-import { format } from '../engine/stats.js'
+import { format, runSpeedRange } from '../engine/stats.js'
 import { cost, edgePoint, homePoints, radius, travel, walkthroughStepCost } from '../engine/geometry.js'
 import Board from './Board.vue'
 import Flower from './Flower.vue'
@@ -21,7 +21,7 @@ const layers = ref({ sense:false, speed:false, energy:false, credits:false, home
 const fallback = ref(false)
 const layerNames = [
   ['sense',Eye,'Sense range','Show each creature’s sensing radius'],
-  ['speed',Rabbit,'Color by speed','Brown is slower · red is faster'],
+  ['speed',Rabbit,'Color by speed','Brown is slower · red is faster · same scale across the run'],
   ['energy',BatteryMedium,'Energy','Gold is full · gray is spent'],
   ['credits',Utensils,'Food credits','Olive for plants · rust for prey'],
 ]
@@ -58,15 +58,7 @@ const creatureEvents = computed(() => events.value.filter(e => e.id===lab.select
   e.type==='birth' && e.parent===lab.selected))
 const visibleEvents = computed(() => creatureEvents.value.filter(e => eventFilter.value==='all' || e.type===eventFilter.value))
 const living = computed(() => lab.frame?.blobs.filter(b => b.alive) ?? [])
-const speedRange = computed(() => {
-  if (!layers.value.speed) return undefined
-  const range = { min:Infinity, max:-Infinity }
-  for (const b of lab.frame?.blobs ?? []) if (b.state !== 7) {
-    range.min = Math.min(range.min, b.speed)
-    range.max = Math.max(range.max, b.speed)
-  }
-  return Number.isFinite(range.min) ? range : undefined
-})
+const speedRange = computed(() => layers.value.speed ? runSpeedRange(lab.run) : undefined)
 const quickLabel = computed(() => lab.batch && lab.batch.label !== 'Preparing' ? 'Progress' : 'Quick Sim')
 const replayCanSeek = computed(() => lab.replay && !lab.loading)
 const canAdvanceDay = computed(() => !!lab.frame && !lab.dayEnded && !lab.loading && (lab.replay || lab.canEnterLive))
@@ -150,7 +142,7 @@ defineExpose({ select, overhead })
   <main ref="surface" class="world" :class="{ 'is-following':lab.following, 'is-overhead':camera==='overhead' }" tabindex="-1" @keydown="shortcuts">
     <section class="stage" aria-label="Simulation field">
       <Board ref="board" :frame="lab.frame" :species="lab.run.setup.species" :layers="layers" :selected="lab.selected"
-        :follow="lab.following" :camera="camera" :scope="lab.scope" :dim="dim" :quality="quality" :speed-range="speedRange"
+        :follow="lab.following" :camera="camera" :scope="lab.scope" :dim="dim" :quality="quality" :speed-range="speedRange" tabletop
         @select="select" @fallback="fallback=true"/>
       <div class="view-tools">
         <button class="icon" aria-label="Layers" title="Layers" :aria-expanded="tool==='layers'" @click="toggle('layers')"><Layers :size="23"/></button>
@@ -187,13 +179,15 @@ defineExpose({ select, overhead })
       </div>
       <div v-if="lab.following && visible" class="creature-flower"
         :class="{ 'layers-open':tool==='layers', 'rate-open':tool==='rate' }">
-        <Flower :values="visible" :bounds="cohort" individual/>
-        <button class="creature-caption" @click="details=true">CURRENT CREATURE<small><i :style="{background:species?.color}"></i>{{ species?.name }} · #{{ visible.id }}</small></button>
+        <Flower :values="visible" :bounds="cohort" individual compact/>
+        <button class="creature-caption" :aria-label="'Current creature details · '+species?.name+' · #'+visible.id" @click="details=true">
+          <i :style="{background:species?.color}"></i>{{ species?.name }} · #{{ visible.id }}
+        </button>
         <button class="vision-toggle" type="button" :aria-pressed="layers.vision" @click="layers.vision=!layers.vision"
           title="Dim the area beyond this creature’s sense range"><Aperture :size="14"/> Sense focus</button>
       </div>
       <div v-if="speedRange && !['rate','player'].includes(tool)" class="speed-key" aria-label="Body color by speed">
-        <span>Speed · points</span>
+        <span>Run speed · points</span>
         <i v-if="speedRange.min !== speedRange.max" aria-hidden="true"></i>
         <div v-if="speedRange.min === speedRange.max">All {{ format(speedRange.min) }}</div>
         <div v-else><span>{{ format(speedRange.min) }}</span><span>{{ format(speedRange.max) }}</span></div>
@@ -201,20 +195,20 @@ defineExpose({ select, overhead })
       <div v-if="lab.loading" class="stage-note" role="status">Building replay for Day {{ lab.replayDay }}…</div>
       <span v-if="fallback" class="render-note" title="Canvas rendering is active">Canvas view</span>
       <div class="player">
-        <button class="icon through" title="Play through generations" aria-label="Play through generations" :aria-pressed="lab.through" @click="lab.toggleThrough"><StepForward :size="20"/></button>
         <div class="transport" role="group" aria-label="Day playback">
-          <button class="icon" title="Previous day" aria-label="Previous day" :disabled="lab.viewing<=1 || lab.loading" @click="lab.moveDay(-1)"><ChevronLeft :size="27"/></button>
+          <button class="icon" title="Previous day" aria-label="Previous day" :disabled="lab.viewing<=1 || lab.loading" @click="lab.moveDay(-1)"><ChevronLeft :size="19"/></button>
           <button class="icon play" :title="transportLabel" :aria-label="transportLabel"
             :disabled="!lab.frame || lab.loading || !lab.replay && (!lab.workerReady || !!lab.batch)" @click="lab.play">
-            <Pause v-if="lab.playing" :size="24" fill="currentColor"/>
-            <RotateCcw v-else-if="transportLabel==='Replay day'" :size="23"/>
-            <Play v-else :size="24" fill="currentColor"/>
+            <Pause v-if="lab.playing" :size="18" fill="currentColor"/>
+            <RotateCcw v-else-if="transportLabel==='Replay day'" :size="18"/>
+            <Play v-else :size="18" fill="currentColor"/>
           </button>
-          <button class="icon" title="Next day" aria-label="Next day" :disabled="!lab.canMoveNext || lab.loading" @click="lab.moveDay(1)"><ChevronRight :size="27"/></button>
+          <button class="icon" title="Next day" aria-label="Next day" :disabled="!lab.canMoveNext || lab.loading" @click="lab.moveDay(1)"><ChevronRight :size="19"/></button>
         </div>
+        <button class="icon through" title="Play through generations" aria-label="Play through generations" :aria-pressed="lab.through" @click="lab.toggleThrough"><StepForward :size="15"/></button>
       </div>
       <div class="player-actions">
-        <button class="secondary quick" :disabled="!!lab.extinctDay && !lab.batch" @click="lab.modal=lab.batch ? 'quick-progress' : 'quick'"><FastForward :size="17" fill="currentColor"/>{{ quickLabel }}</button>
+        <button class="quick" :disabled="!!lab.extinctDay && !lab.batch" @click="lab.modal=lab.batch ? 'quick-progress' : 'quick'"><FastForward :size="15" fill="currentColor"/>{{ quickLabel }}</button>
         <button class="icon" aria-label="Playback actions" title="Playback actions" @click="toggle('player')"><Ellipsis :size="20"/></button>
         <button class="icon" aria-label="Viewing speed" :title="'Viewing speed · '+rateText" :aria-expanded="tool==='rate'" @click="toggle('rate')"><Clock :size="21"/></button>
       </div>

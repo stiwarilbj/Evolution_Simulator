@@ -153,24 +153,6 @@ function escapeDetail(event) {
 </script>
 <template>
   <section class="dock" aria-label="Current generation and timeline">
-    <div class="stats">
-      <div class="stats-heading">
-        <h2>Current Generation Stats</h2>
-        <span class="quiet stats-state">Day {{ lab.viewing }} · {{ lab.dayEnded ? 'Final' : lab.status }}</span>
-        <button class="icon compact stat-info" title="View generation table" aria-label="View generation table" @click="emit('table')"><Info :size="15"/></button>
-        <select v-model="lab.scope" aria-label="Generation statistics species">
-          <option value="all">All species</option>
-          <option v-for="s in lab.run.setup.species.filter(s=>s.enabled)" :key="s.id" :value="s.id">{{ s.name }}</option>
-        </select>
-        <button v-if="fold" class="icon" aria-label="Expand generations" @click="fold=false"><ChevronUp :size="18"/></button>
-      </div>
-      <div class="stat-grid">
-        <div v-for="m in METRICS" :key="m.key" class="stat" :style="{ '--metric': m.heading ?? m.color }" :title="m.label+' · '+m.unit">
-          <span><i></i><span class="stat-long">{{ m.label }}</span><span class="stat-short">{{ m.short }}</span></span>
-          <strong>{{ format(visibleFrame[m.key],m.key === 'population' ? 0 : 2) }}</strong>
-        </div>
-      </div>
-    </div>
     <div v-if="!fold" class="ribbon" @keydown.esc="escapeDetail">
       <div ref="scroll" class="ribbon-scroll" @wheel="wheel" @scroll.passive="anchorDetail">
         <div class="tile-track">
@@ -181,7 +163,7 @@ function escapeDetail(event) {
             @focus="focusDay=tile.day" @click="clickTile($event,tile)" @keydown="keys($event,tile.day)"
             @contextmenu="tile.row && ($event.preventDefault(),inspect(tile.day))">
             <Flower v-if="mode!=='line'" :values="tile.values" :bounds="bounds" :rotation="rotation"
-              :six="mode==='six'" :interactive="!!tile.row"/>
+              :six="mode==='six'" :interactive="!!tile.row" compact/>
             <span class="day-number">{{ tile.day }}</span>
             <small v-if="!tile.row">{{ tile.day===lab.liveDay && !lab.batch ? 'Live' : 'Pending' }}</small>
             <small v-else-if="!lab.extinctDay && tile.day===firstExtinct">Extinct</small>
@@ -192,7 +174,7 @@ function escapeDetail(event) {
           </button>
           <button v-else class="day-tile more-tile" aria-label="More Generations" @click="lab.modal='extend'"><Layers :size="25"/><span>More</span></button>
           <svg v-if="mode==='line'" class="ribbon-line" :viewBox="'0 0 '+tiles.length*100+' 65'"
-            :style="{width:tiles.length*100+'px'}" preserveAspectRatio="none" aria-hidden="true">
+            :style="{width:'calc(var(--tile) * '+tiles.length+')'}" preserveAspectRatio="none" aria-hidden="true">
             <path :d="miniSeries.path" :stroke="miniKey.color" fill="none" stroke-width="2"/>
             <circle v-for="point in miniSeries.points" :key="point.day" :cx="point.x" :cy="point.y" r="3" :fill="miniKey.color"/>
           </svg>
@@ -203,7 +185,7 @@ function escapeDetail(event) {
           @click="chooseLegendMetric(idx,i)" :style="{ '--metric':METRICS[idx].petal }">
           <i></i>{{ METRICS[idx].short }}<b v-if="i===rotation" aria-hidden="true">•</b>
         </button>
-        <button class="legend-help" @click="emit('table')"><Info :size="13"/> {{ mode==='line' ? 'Exact values' : 'Scale and exact values' }}</button>
+        <button class="legend-help" title="Scale and exact values" @click="emit('table')"><Info :size="13"/> Exact values</button>
         <button class="legend-toggle" aria-label="Hide generation legend" @click="legend=false"><ChevronLeft :size="16"/></button>
       </div>
       <button v-else class="icon legend-open" aria-label="Show generation legend" @click="legend=true"><ChevronRight :size="16"/></button>
@@ -225,6 +207,23 @@ function escapeDetail(event) {
         <button @click="closeDetail(true)">Close</button>
       </div>
       <div class="ribbon-label">GENERATIONS</div>
+    </div>
+    <div class="stats">
+      <div class="stats-heading">
+        <h2>Current Generation Stats</h2>
+        <button class="icon compact stat-info" title="View generation table" aria-label="View generation table" @click="emit('table')"><Info :size="15"/></button>
+        <select v-model="lab.scope" aria-label="Generation statistics species">
+          <option value="all">All species</option>
+          <option v-for="s in lab.run.setup.species.filter(s=>s.enabled)" :key="s.id" :value="s.id">{{ s.name }}</option>
+        </select>
+        <button v-if="fold" class="icon compact" aria-label="Expand generations" @click="fold=false"><ChevronUp :size="18"/></button>
+      </div>
+      <div class="stat-grid">
+        <div v-for="m in METRICS" :key="m.key" class="stat" :style="{ '--metric': m.heading ?? m.color }" :title="m.label+' · '+m.unit">
+          <span><i></i>{{ m.short }}</span>
+          <strong>{{ format(visibleFrame[m.key],m.key === 'population' ? 0 : 2) }}</strong>
+        </div>
+      </div>
     </div>
   </section>
 </template>

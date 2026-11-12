@@ -104,6 +104,7 @@ export const useLab = defineStore('lab', () => {
     if (replay.value) return 'Replay'
     if (workerError.value) return 'Simulation unavailable'
     if (playing.value) return 'Live'
+    if (dayEnded.value) return 'Final'
     return frame.value?.time ? 'Paused' : 'Ready'
   })
   let writer, ticket = 0, cache = new Map(), track, epoch = 0, finishConnection

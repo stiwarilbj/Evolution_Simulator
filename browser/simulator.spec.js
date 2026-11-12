@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import { LEGACY_RULE_VERSION, starter } from '../src/engine/config.js'
+import { guideSource } from '../src/guide-replay.js'
 
 async function openSimulator(page) {
   await page.addInitScript(() => localStorage.setItem('evolution.tour', '1'))
@@ -179,10 +180,11 @@ test('live generations end when settled and Quick Sim stops at the extinction ti
   await page.getByRole('slider', { name: 'Viewing speed multiplier' }).fill('12')
   await speed.click()
   await page.getByRole('button', { name: 'Play', exact: true }).click()
-  await expect(page.getByText('Day 1 · Final')).toBeVisible()
+  const runStatus = page.getByRole('button', { name: 'Run options' })
+  await expect(runStatus).toHaveText('Day 1 / 10 · Final')
   await expect(page.getByRole('progressbar', { name: 'Current day elapsed' })).toHaveAttribute('aria-valuemax', '5')
   await page.getByRole('button', { name: 'Next day' }).click()
-  await expect(page.getByText('Day 2 · Ready')).toBeVisible()
+  await expect(runStatus).toHaveText('Day 2 / 10 · Ready')
 
   await quickThrough(page, 10)
   await expect(page.getByRole('heading', { name: 'Population extinct' })).toBeVisible()
@@ -240,6 +242,17 @@ test('World fits split windows and keeps its controls in full screen', async ({ 
     await expect(stats).toBeInViewport({ ratio: 1 })
     await expect(timeline).toBeInViewport({ ratio: 1 })
     await expect(quick).toBeInViewport({ ratio: 1 })
+    expect(await page.evaluate(() => {
+      const nav = document.querySelector('.app-header nav').getBoundingClientRect()
+      const run = document.querySelector('.run-center').getBoundingClientRect()
+      return nav.right <= run.left || nav.bottom <= run.top
+    })).toBe(true)
+    const exactValues = page.getByRole('button', { name: 'Exact values' })
+    if (await exactValues.isVisible()) {
+      const legend = await exactValues.boundingBox()
+      const ribbon = await page.locator('.ribbon').boundingBox()
+      expect(legend.y + legend.height).toBeLessThanOrEqual(ribbon.y + ribbon.height)
+    }
     await expect.poll(() => page.evaluate(() => ({
       width: document.documentElement.scrollWidth,
       height: document.documentElement.scrollHeight,
@@ -265,6 +278,49 @@ test('World fits split windows and keeps its controls in full screen', async ({ 
   await expect(food).toBeInViewport({ ratio: 1 })
   await expect(trends).toBeInViewport({ ratio: 1 })
   expect(await page.evaluate(() => window.scrollY)).toBe(0)
+})
+
+test('World shows hunting and resting thoughts and keeps one speed scale across days @pages', async ({ page }) => {
+  await openSimulator(page)
+  await page.emulateMedia({ reducedMotion:'reduce' })
+  const { setup } = guideSource('hunt')
+  Object.assign(setup, { mode:'live', days:10 })
+  await openRunLibrary(page)
+  await page.getByRole('dialog', { name:'Run Library' }).locator('input[type=file]').setInputFiles({
+    name:'hunt.json', mimeType:'application/json', buffer:Buffer.from(JSON.stringify(setup)),
+  })
+  await page.getByRole('button', { name:'Evolve!' }).click()
+  await expect(page.getByRole('button', { name:'Run options' })).toHaveText('Day 1 / 10 · Ready')
+  await quickThrough(page, 3)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
+  await page.getByRole('button', { name:'Close', exact:true }).click()
+  await dayTile(page, 1).click()
+
+  const time = page.getByRole('slider', { name:'Replay time' })
+  await expect(time).toHaveValue('0')
+  await page.getByRole('button', { name:'Layers', exact:true }).click()
+  await page.getByRole('button', { name:'Color by speed' }).click()
+  await page.getByRole('button', { name:'Close layers' }).click()
+  const bounds = page.locator('.speed-key div span')
+  await expect(bounds).toHaveText(['8.89', '11.43'])
+  await page.getByRole('combobox', { name:'Generation statistics species' }).selectOption('orange')
+  await expect(bounds).toHaveText(['8.89', '11.43'])
+
+  await page.getByRole('button', { name:'View options' }).click()
+  await page.getByRole('button', { name:'Creatures', exact:true }).click()
+  const details = page.getByRole('complementary', { name:'Creature details' })
+  await details.getByRole('combobox', { name:'Creature', exact:true }).selectOption('51')
+  await details.getByRole('button', { name:'Close creature details' }).click()
+  await time.fill('0.2')
+  await expect(page.getByRole('button', { name:'Creature thought · Chasing' }).locator('.lucide-utensils')).toBeVisible()
+  await time.fill('0.5')
+  await expect(page.getByRole('button', { name:'Creature thought · Home' }).getByText('zzz')).toBeVisible()
+  await expect(page.getByRole('button', { name:'Current creature details · Orange · #51' })).toBeVisible()
+
+  await dayTile(page, 3).click()
+  await expect(page.getByRole('button', { name:'Run options' })).toHaveText('Day 3 / 10 · Replay')
+  await expect(time).toHaveValue('0')
+  await expect(bounds).toHaveText(['8.89', '11.43'])
 })
 
 test('World restores layers for every creature after clearing a selection', async ({ page }) => {
@@ -1406,7 +1462,7 @@ test('Watch creature follows a newborn at dusk or at the next recorded dawn', as
   const watchCreature = page.getByRole('button', { name: 'Watch creature' })
   const runOptions = page.getByRole('button', { name: 'Run options' })
   const replayTime = page.getByRole('slider', { name: 'Replay time' })
-  const current = page.getByRole('button', { name: /CURRENT CREATURE.*#51/ })
+  const current = page.getByRole('button', { name: /Current creature details.*#51/ })
   await watchCreature.click()
   await expect(runOptions).toHaveText('Day 1 / 10 · Replay')
   const end = Number(await replayTime.getAttribute('max'))
@@ -1522,7 +1578,7 @@ test('creature details use the movement and energy rules for the day being watch
   const travel = details.getByText('Travel rate', { exact: true }).locator('xpath=following-sibling::dd[1]')
   const energy = details.getByText('Energy cost', { exact: true }).locator('xpath=following-sibling::dd[1]')
   const follow = page.getByRole('button', { name: 'Follow creature' })
-  const founder = page.getByRole('button', { name: /CURRENT CREATURE.*#1$/ })
+  const founder = page.getByRole('button', { name: /Current creature details.*#1$/ })
   await expect(runOptions).toHaveText('Day 1 / 10 · Replay')
   await follow.click()
   await founder.click()
@@ -1607,7 +1663,7 @@ test('playback actions disable advancing at dusk and work again on the next day'
   await expect(through).toHaveAttribute('aria-pressed', 'true')
   await through.click()
   await page.getByRole('button', { name: 'Follow creature' }).click()
-  await page.getByRole('button', { name: /CURRENT CREATURE.*#1$/ }).click()
+  await page.getByRole('button', { name: /Current creature details.*#1$/ }).click()
   const details = page.getByRole('complementary', { name: 'Creature details' })
   await expect(details.getByText('10.002 per step')).toBeVisible()
 

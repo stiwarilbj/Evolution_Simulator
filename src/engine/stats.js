@@ -48,6 +48,21 @@ export function metricValue(row, key) {
   return key === 'population' ? row?.population : row?.[key]?.mean
 }
 
+export function runSpeedRange(run) {
+  let min = Infinity, max = -Infinity
+  for (const species of run.setup.species) if (species.enabled) {
+    min = Math.min(min, species.speed)
+    max = Math.max(max, species.speed)
+  }
+  for (const record of run.summaries) {
+    const speed = record.rows.all?.speed
+    if (!Number.isFinite(speed?.min) || !Number.isFinite(speed?.max)) continue
+    min = Math.min(min, speed.min)
+    max = Math.max(max, speed.max)
+  }
+  return { min, max }
+}
+
 const numberFormats = new Map()
 export function format(value, digits = 2) {
   if (value == null) return '—'

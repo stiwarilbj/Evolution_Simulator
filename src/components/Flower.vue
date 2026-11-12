@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { METRICS, format } from '../engine/stats.js'
 
 const props = defineProps({
-  values: Object, bounds: Object, rotation: Number, six: Boolean, individual: Boolean, interactive: Boolean
+  values: Object, bounds: Object, rotation: Number, six: Boolean, individual: Boolean, interactive: Boolean, compact: Boolean
 })
 const active = ref(null)
 const keys = computed(() => props.six ? ['age','deathAge','speed','size','sense'] : ['age','speed','size','sense'])
@@ -38,7 +38,7 @@ watch(() => props.interactive, value => { if (!value) active.value = null })
 <template>
   <svg viewBox="0 0 100 100" class="flower" :class="{ 'flower-interactive':interactive }" aria-hidden="true"
     @pointerleave="active=null">
-    <circle cx="50" cy="50" r="45.5" fill="#121212" stroke="#2B2B2B" stroke-width=".6"/>
+    <circle v-if="!compact" cx="50" cy="50" r="45.5" fill="#121212" stroke="#2B2B2B" stroke-width=".6"/>
     <g class="flower-wheel" :style="{ transform:'rotate('+angle+'deg)' }">
       <g v-for="w in wedges" :key="w.key" class="flower-sector" :class="{ 'sector-muted':active==='population' }">
         <path class="sector-tint" :class="{ 'sector-active':active===w.key }"
