@@ -69,3 +69,4 @@
 
 - Matched the five Trends plots to the video with shaded spread bands and dawn stats. Kept dusk and percentiles in Chart options. Added an overhead sight example with Days 1 and 648 from a separate 1,000-day run.
 - Tightened Settings to match the video’s narrow overlay, color-coded compact controls, side-by-side Energy and Food fields, and teal Evolve button. Fixed clipped reproduction notes and mutation value fields.
+- Added independent days, timelines, and camera angles to Compare, kept those choices in its URL, and staged the seed 118 Day 6 hunter versus Day 77 forager sequence with timed dimming and camera cuts.

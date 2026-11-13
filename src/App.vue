@@ -30,7 +30,15 @@ const scrolls = new Map()
 let navigating = false, routeRequest = 0, retryNavigation, sharedSetupHash
 
 function readComparison(query) {
-  return { left:query.get('left'), right:query.get('right'), day:Number(query.get('pairDay')) || null }
+  const day=Number(query.get('pairDay')) || null
+  const camera=value=>['board','overhead','close'].includes(value) ? value : 'board'
+  return {
+    left:query.get('left'), right:query.get('right'), day,
+    leftDay:Number(query.get('leftDay')) || day,
+    rightDay:Number(query.get('rightDay')) || day,
+    leftCamera:camera(query.get('leftCam')),
+    rightCamera:camera(query.get('rightCam')),
+  }
 }
 function knownExample(id) { return Object.hasOwn(guidedExamples,id) ? id : null }
 function readLesson(query) { return lessons.find(item=>item.id===query.get('lesson'))?.id ?? 'opening' }
@@ -38,10 +46,14 @@ function address(view = page.value, day = lab.viewing, settings = lab.settings, 
   if (!lab.run) return '#/'
   const query = new URLSearchParams()
   if (view==='compare') {
-    const { left, right, day:pairDay } = comparison.value
+    const { left, right, day:pairDay, leftDay, rightDay, leftCamera, rightCamera } = comparison.value
     if (left != null) query.set('left',left)
     if (right != null) query.set('right',right)
     if (pairDay) query.set('pairDay',pairDay)
+    if (leftDay) query.set('leftDay',leftDay)
+    if (rightDay) query.set('rightDay',rightDay)
+    if (leftCamera && leftCamera!=='board') query.set('leftCam',leftCamera)
+    if (rightCamera && rightCamera!=='board') query.set('rightCam',rightCamera)
   }
   if (view==='viewer' && guided) query.set('example',guided)
   if ((view==='about' || view==='viewer' && guided) && lesson.value!=='opening') query.set('lesson',lesson.value)
