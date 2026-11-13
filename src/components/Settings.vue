@@ -227,15 +227,14 @@ onMounted(()=>dialog.value.showModal())
           <button v-for="[mode,name,body] in [['prepare','Prepare and watch','Build the archive in the background.'],['live','Watch live','Run each tick as you watch.']]" :key="mode" type="button"
             class="secondary" :aria-pressed="draft.mode===mode" @click="draft.mode=mode"><strong>{{ name }}</strong><small>{{ body }}</small></button>
         </div>
-        <details class="run-options">
-          <summary>Run mode</summary>
+        <div class="run-controls">
           <label v-if="draft.version >= SETTLED_RULE_VERSION" class="run-mode">End each day
             <select v-model="draft.endMode">
               <option value="settled">When all blobs settle or die</option>
               <option value="timed">After a fixed time</option>
             </select>
           </label>
-        </details>
+        </div>
         <div class="advanced setting-inset">
           <button type="button" class="secondary" :aria-expanded="advanced" @click="advanced=!advanced">Advanced Rules {{ advanced ? '▴' : '▾' }}</button>
           <div v-if="advanced" class="advanced-grid">
