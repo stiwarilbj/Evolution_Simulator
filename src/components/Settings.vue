@@ -146,9 +146,9 @@ onMounted(()=>dialog.value.showModal())
         <div v-if="fork==null" class="form-seam">
           <div class="seam-copy"><p>How many creatures start?</p><div class="founder-preview"><span class="preview-shadow"></span><span class="preview-blob" :style="{backgroundColor:selected.color}"></span></div>
             <small>Founder preview · {{ selected.name }}</small></div>
-          <div class="form-stack">
+          <div class="form-stack trait-stack">
             <NumberField :id="selected.id+'.count'" v-model="selected.count" label="Founders" :min="10" :max="1000" compact :error="issue[selected.id+'.count']"/>
-            <div class="number-group">
+            <div class="number-group traits-grid">
               <NumberField v-for="key in TRAITS" :id="selected.id+'.'+key" :key="key" v-model="selected[key]" :label="labels[key]"
                 :min="1" :max="100" :tint="swatches[key]" :error="issue[selected.id+'.'+key]"/>
             </div>
@@ -164,13 +164,13 @@ onMounted(()=>dialog.value.showModal())
             <small v-if="standardDeviation">Standard deviation (σ) sets how far the trait usually changes. Zero keeps the parent’s value. Sense range can reach zero. Speed and size stay positive.</small>
             <small v-else>This setup uses variance (σ²) and a minimum inherited trait of 1.</small>
           </div>
-          <div class="form-stack">
+          <div class="form-stack mutation-stack">
             <div v-for="key in TRAITS" :key="key" class="variance-row">
               <NumberField :id="selected.id+'.'+spreadKey+'.'+key" v-model="selected[spreadKey][key]"
                 :label="(standardDeviation ? 'σ ' : 'σ² ')+labels[key]"
                 :min="standardDeviation ? 0 : .01" :max="10" :step=".01" :pace="1" :tint="swatches[key]"
                 :disabled="!selected.mutation[key]" :error="issue[selected.id+'.'+spreadKey+'.'+key]"/>
-              <div class="variance-meta">
+              <div class="variance-meta mutation-meta">
                 <small v-if="Number.isFinite(selected[spreadKey][key])">
                   {{ standardDeviation ? 'Variance (σ²) = '+Number((selected[spreadKey][key] ** 2).toFixed(4)) : 'σ = '+Math.sqrt(selected[spreadKey][key]).toFixed(2)+' trait points' }}
                 </small>
@@ -192,8 +192,8 @@ onMounted(()=>dialog.value.showModal())
             <label class="olive-label">Food schedule <select v-model="draft.scheduleMode" @change="delete issue.schedule"><option value="constant">Constant</option><option value="ramp">Ramp</option><option value="step">Step</option></select></label>
           </div>
         </div>
-        <p class="quiet center">Food and energy reset at dawn.</p>
-        <p v-if="draft.scheduleMode==='constant' && draft.schedule.length" class="quiet center">Constant runs use the daily food count. If the schedule has invalid points, starting the run clears the schedule.</p>
+        <p class="quiet center reset-note">Food and energy reset at dawn.</p>
+        <p v-if="draft.scheduleMode==='constant' && draft.schedule.length" class="quiet center reset-note">Constant runs use the daily food count. If the schedule has invalid points, starting the run clears the schedule.</p>
         <div v-if="rewards" class="setting-inset">
           <NumberField id="plantReward" v-model="draft.plantReward" label="Plant reward" :min="0" :max="1000" :pace="100" tint="#6C7C3A" :error="issue.plantReward"/>
           <NumberField id="preyReward" v-model="draft.preyReward" label="Prey reward" :min="0" :max="1000" :pace="100" tint="#8F8048" :error="issue.preyReward"/>
@@ -217,7 +217,7 @@ onMounted(()=>dialog.value.showModal())
         <div class="setting-inset final-fields">
           <label class="run-name">Run name <input id="name" v-model="draft.name" maxlength="60"></label>
           <NumberField id="days" v-model="draft.days" label="Days to run" :min="10" :max="1000" :error="issue.days"/>
-          <label v-if="draft.version >= SETTLED_RULE_VERSION" class="run-name">End each day
+          <label v-if="draft.version >= SETTLED_RULE_VERSION" class="run-name run-mode">End each day
             <select v-model="draft.endMode">
               <option value="settled">When all blobs settle or die</option>
               <option value="timed">After a fixed time</option>

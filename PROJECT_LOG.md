@@ -68,3 +68,4 @@
 ## 2026-11-13
 
 - Matched the five Trends plots to the video with shaded spread bands and dawn stats. Kept dusk and percentiles in Chart options. Added an overhead sight example with Days 1 and 648 from a separate 1,000-day run.
+- Tightened Settings to match the video’s narrow overlay, color-coded compact controls, side-by-side Energy and Food fields, and teal Evolve button. Fixed clipped reproduction notes and mutation value fields.
