@@ -5,7 +5,7 @@ import { LEGACY_RULE_VERSION, MAX_SEED, SETTLED_RULE_VERSION, starter, plantsFor
 import { canHunt, cost, radius, walkthroughStepCost } from '../src/engine/geometry.js'
 import { normal } from '../src/engine/random.js'
 import { dawn, dusk, founders, snapshot, step } from '../src/engine/simulation.js'
-import { distribution } from '../src/engine/stats.js'
+import { distribution, openingTrends } from '../src/engine/stats.js'
 import { prepareTrack, trackFrame } from '../src/track.js'
 import { csv } from '../src/export.js'
 import { sizeMutationPair } from '../src/experiments.js'
@@ -52,6 +52,37 @@ test('dawn balances all four edges, resets credits and capacity, and keys food b
   assert.deepEqual(field.plants, dawn(config, 1, opening).plants)
   assert.notDeepEqual(field.plants, dawn(config, 2, opening).plants)
   assert.notDeepEqual(field.plants, dawn({ ...config, seed: 99 }, 1, opening).plants)
+})
+
+test('Trends reconstructs each opening cohort from saved results across a branch', () => {
+  const setup = starter()
+  setup.species[1].enabled = true
+  setup.species[1].sense = 35
+  const initial = founders(setup)
+  const run = { summaries:[], checkpoints:[{ day:0, ...initial }] }
+  let checkpoint = initial
+  const openings = []
+  for (let day = 1; day <= 3; day++) {
+    const config = day === 3 ? { ...setup, food:80 } : setup
+    openings.push(checkpoint.roster)
+    const result = step(dawn(config, day, checkpoint), config, Infinity, true)
+    run.summaries.push(result.summary)
+    checkpoint = result.checkpoint
+  }
+  const records = openingTrends(JSON.parse(JSON.stringify(run)))
+  for (const [index, record] of records.entries()) {
+    for (const [scope, row] of Object.entries(record.rows)) {
+      const roster = openings[index].filter(blob => scope === 'all' || scope === blob.species)
+      assert.equal(row.population, roster.length)
+      for (const trait of ['age', 'speed', 'size', 'sense']) {
+        assert.deepEqual(row[trait], distribution(roster.map(blob => blob[trait])))
+      }
+      assert.equal(row.food, index === 2 ? 80 : 50)
+      assert.deepEqual(row.deathAge, run.summaries[index].rows[scope].deathAge)
+    }
+  }
+  assert.equal(records[0].rows.all.age.mean, 0)
+  assert.notEqual(records[0].rows.all.age.mean, run.summaries[0].rows.all.age.mean)
 })
 
 test('video experiment settlers and their offspring start the next day at the same refuge', () => {

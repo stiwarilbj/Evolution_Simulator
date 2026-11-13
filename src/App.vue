@@ -174,7 +174,6 @@ async function watchDay(day, id, { sense = false, atEnd = false } = {}) {
     if (current()) navigating = false
   }
 }
-function showSense(day) { return watchDay(day, null, { sense:true }) }
 function retryReplay() {
   if (retryNavigation?.failure === lab.replayFailure) void retryNavigation.retry()
   else void lab.retryReplay()
@@ -296,9 +295,9 @@ onUnmounted(() => {
   <div id="main-surface" ref="mainSurface" :class="{ 'reading-surface':page!=='viewer' || example }" tabindex="-1" :inert="!ready">
     <template v-if="lab.run">
       <World v-show="page==='viewer' && !example" ref="world" @reroll="reroll" @fullscreen-change="fullscreenSurface=$event"/>
-      <GuidedWorld v-if="page==='viewer' && example" :example="example" @exit="go('about')"/>
+      <GuidedWorld v-if="page==='viewer' && example" :example="example" @exit="go(example==='sight-comparison'?'stats':'about')"/>
       <Trends v-if="visited.stats" v-show="page==='stats'" :active="page==='stats'"
-        @watch="watchDay" @sense="showSense" @restart="settings(lab.run.setup)" @reroll="reroll"/>
+        @watch="watchDay" @example="go('viewer',$event)" @restart="settings(lab.run.setup)" @reroll="reroll"/>
       <About v-if="page==='about'" :lesson="lesson" @lesson="changeLesson" @example="go('viewer',$event)"
         @world="go('viewer')" @trends="go('stats')" @compare="openComparison"/>
       <Compare v-if="page==='compare'" :key="comparisonVersion" :initial="comparison" @change="comparisonChanged" @library="task('library')"/>

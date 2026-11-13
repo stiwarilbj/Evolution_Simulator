@@ -163,7 +163,7 @@ onMounted(()=>dialog.value.showModal())
           <option v-for="s in lab.run.setup.species.filter(s=>s.enabled)" :key="s.id" :value="s.id">{{ s.name }}</option></select></label>
         <label class="dialog-field">From day <input type="number" v-model.number="start" min="1" :max="end"></label>
         <label class="dialog-field">Through day <input type="number" v-model.number="end" :min="start" :max="lab.completed"></label>
-        <p class="quiet">{{ exportRowCount }} data rows</p>
+        <p class="quiet">{{ exportRowCount }} data rows · Trait stats at dusk</p>
         <p v-if="!lab.completed" class="quiet">Complete a day to download results.</p>
         <p v-else-if="!canExportCsv" class="issue">Choose whole days from 1 through {{ lab.completed }} in order.</p>
       </template>
@@ -171,7 +171,7 @@ onMounted(()=>dialog.value.showModal())
       <footer><button class="secondary" @click="close">Cancel</button><button class="primary" :disabled="exportKind==='csv'&&!canExportCsv" @click="exportRun"><Download :size="17"/> Download</button></footer>
     </template>
     <template v-else-if="lab.modal==='table'">
-      <p class="quiet">{{ scopeLabel }} · Completed generations · Select a day to replay it</p>
+      <p class="quiet">{{ scopeLabel }} · Dusk results · Select a day to replay it</p>
       <div class="table-scroll"><table><thead><tr><th>Day</th><th v-for="m in METRICS" :key="m.key">{{ m.short }}</th></tr></thead>
         <tbody><tr v-for="r in rows" :key="r.day"><td><button class="link" @click="lab.modal=null;emit('watch',r.day)">{{ r.day }}</button></td>
           <td v-for="m in METRICS" :key="m.key" :title="String(metricValue(r,m.key) ?? '')">{{ format(metricValue(r,m.key),m.key==='population'?0:2) }}</td></tr></tbody></table></div>

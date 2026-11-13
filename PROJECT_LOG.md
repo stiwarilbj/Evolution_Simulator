@@ -64,3 +64,7 @@
 - Rebuilt the video’s 600-generation size experiment around step-by-step foraging and inherited refuges. In Chromium with seed 118, average size drops from 10 to 7.37 in the wide run and 6.95 in the narrow run. Compare opens at Day 600 with both results and hunt replays.
 - Added an illustrated video walkthrough, a footprint race, and an energy comparison. Each World example opens its own replay. The family replay follows a parent home and then shows the newborn’s small sight range.
 - Matched World more closely to the video with a tilted board, smaller playback controls and flowers, and simpler creature follow view. The speed colors now use bounds from the whole run.
+
+## 2026-11-13
+
+- Matched the five Trends plots to the video with shaded spread bands and dawn stats. Kept dusk and percentiles in Chart options. Added an overhead sight example with Days 1 and 648 from a separate 1,000-day run.

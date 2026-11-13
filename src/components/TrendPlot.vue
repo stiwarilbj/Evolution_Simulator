@@ -7,7 +7,7 @@ import { format } from '../engine/stats.js'
 
 Chart.register(LineController,LineElement,PointElement,BarController,BarElement,LinearScale,CategoryScale,Tooltip,Filler)
 const props = defineProps({ id:String, title:String, rows:Array, series:Array, unit:String, color:String,
-  pin:Number, focus:Boolean, right:Boolean, hideable:Boolean, legend:Boolean, guide:Number, scope:String, annotations:Array })
+  pin:Number, focus:Boolean, right:Boolean, hideable:Boolean, legend:Boolean, guide:Number, scope:String, annotations:Array, compact:Boolean })
 const emit = defineEmits(['hide','focus','pin','watch','range'])
 const canvas = ref(), hovered = ref(null)
 let chart, brush, ignoreClick = false
@@ -116,16 +116,17 @@ function update() {
   chart.data.datasets=props.series.map(s=>({
     type:s.bar?'bar':'line', label:s.label, data:props.rows.map(s.value), borderColor:s.color,
     backgroundColor:s.fill ?? s.color, borderDash:s.dash ?? [], borderWidth:s.width ?? (s.bar ? 0 : 2.2),
-    pointRadius:s.bar || s.width && s.width<2 ? 0 : props.rows.length<=25 ? 1.8 : 0,
-    pointHoverRadius:s.bar?0:3.8, spanGaps:false, hidden:hidden.value.includes(s.label), tension:0,
+    pointRadius:!s.bar && (s.primary || (s.width ?? 2)>=2) && props.rows.length<=25 ? 1.8 : 0,
+    pointHoverRadius:s.bar || s.tooltip===false?0:3.8, spanGaps:false, hidden:hidden.value.includes(s.label), tension:0,
     yAxisID:s.axis ?? 'y', fill:s.area ?? false, categoryPercentage:.8, barPercentage:.84,
-    grouped:!s.bar, order:s.bar?2:s.width && s.width<2?1:0
+    grouped:!s.bar, order:s.bar?2:!s.primary && s.width && s.width<2?1:0
   }))
   chart.options.scales.y.beginAtZero=props.series.some(s=>s.bar || s.zero)
   chart.options.scales.y1.display=!!props.right
   chart.update('none')
 }
 function create() {
+  const ticks=props.compact ? { ...axis,color:'#8E8A80',font:{...axis.font,size:11} } : axis
   chart=new Chart(canvas.value,{
     type:'line', plugins:[marker],data:{labels:[],datasets:[]},
     options:{
@@ -142,11 +143,12 @@ function create() {
         else emit('watch',day)
       },
       layout:{padding:{left:8,right:12,top:6}},
-      plugins:{tooltip:{
+      plugins:{filler:{propagate:false},tooltip:{
         enabled:true, backgroundColor:'#111110',titleColor:'#FFFDFC',bodyColor:'#BDBAB0',
         padding:11, borderColor:'#56534A', borderWidth:1, cornerRadius:4,
         titleFont:{family:'Lab Mono',size:15},bodyFont:{family:'Lab Mono',size:12},
-        xAlign:'right', displayColors:true,
+        displayColors:true,
+        filter:item=>props.series[item.datasetIndex]?.tooltip!==false,
         callbacks:{
           title:items=>'Day '+items[0]?.label,
           afterTitle:()=>props.scope ?? '',
@@ -154,13 +156,14 @@ function create() {
             const s=props.series[item.datasetIndex]
             let value=item.raw
             if(s.bar && value<0) value=-value
-            return s.label+'  '+format(value,s.integer?0:2)
+            const spread=s.spread?.(props.rows[item.dataIndex])
+            return s.label+'  '+format(value,s.integer?0:2)+(spread==null?'':' ± '+format(spread))
           }
         }
       }},
       scales:{
-        x:{ ticks:{...axis,minRotation:0,maxRotation:0},grid:{display:false},border:{color:'#56534A'} },
-        y:{ ticks:axis,grid:{color:ctx=>ctx.tick.value===0?'#545147':'#33332F'},border:{color:'#45433F'},grace:'7%' },
+        x:{ ticks:{...ticks,minRotation:0,maxRotation:0},grid:{display:false},border:{color:props.compact?'#3D3A35':'#56534A'} },
+        y:{ ticks,grid:{display:!props.compact,color:ctx=>ctx.tick.value===0?'#545147':'#33332F'},border:{color:props.compact?'#3D3A35':'#45433F'},grace:'7%' },
         y1:{ position:'right', display:false, beginAtZero:true, ticks:{...axis,color:'#EEEDD6'},grid:{drawOnChartArea:false},border:{color:'#45433F'} }
       }
     }
@@ -189,7 +192,7 @@ function downloadChart() {
 }
 </script>
 <template>
-  <article class="trend-plot" :class="{ 'focused-plot':focus }" :style="{'--plot':color || '#EEEDD6'}"
+  <article class="trend-plot" :class="{ 'focused-plot':focus, 'compact-plot':compact }" :style="{'--plot':color || '#EEEDD6'}"
     :aria-label="title+' chart'" :id="focus ? undefined : 'chart-'+title.toLowerCase().replaceAll(' ','-')">
     <header class="plot-heading">
       <button v-if="hideable && !focus" class="chart-hide" :aria-label="'Hide '+title" @click="emit('hide')"><Minus :size="13"/></button>

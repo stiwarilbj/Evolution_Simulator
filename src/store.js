@@ -24,7 +24,7 @@ function recordDay(run, { day, checkpoint, summary }) {
   return { ...run, summaries: [...run.summaries, summary], latest: checkpoint, partial: null, checkpoints }
 }
 
-function prepareExperiment(setup, signal, progress) {
+export function prepareExperiment(setup, signal, progress) {
   signal.throwIfAborted()
   return new Promise((resolve, reject) => {
     const worker = createWorker()

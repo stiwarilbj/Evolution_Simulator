@@ -1,6 +1,9 @@
 import { starter } from './engine/config.js'
 import { founders } from './engine/simulation.js'
 
+export const SIGHT_EXAMPLE_DAYS = 1000
+export const SIGHT_EXAMPLE_LATER_DAY = 648
+
 export function guideSource(name) {
   const setup = starter()
   if (name === 'hunt') {
@@ -13,6 +16,9 @@ export function guideSource(name) {
     Object.assign(setup.species[1], { enabled:true, speed:12 })
   }
   if (name === 'scarcity') Object.assign(setup, { seed:3, food:10 })
+  if (name === 'sight-comparison') Object.assign(setup, {
+    seed:118, days:SIGHT_EXAMPLE_DAYS, foraging:'walkthrough', name:'Sight comparison',
+  })
   if (name === 'offspring') {
     Object.assign(setup, { seed:1, food:60 })
     setup.species[0].sense = 16
@@ -22,6 +28,13 @@ export function guideSource(name) {
 }
 
 export function lessonMoments(id, track, next) {
+  if (id === 'sight-comparison') {
+    return [track, next].map((part, index) => ({
+      track:part, from:0, to:Math.min(part.duration, 4),
+      preview:Math.min(part.duration, 1.6),
+      label:'Day '+part.day+(index ? ' · Later sight' : ' · Early sight'),
+    }))
+  }
   const event = (type, predicate = () => true) => track.events.find(item => item.type === type && predicate(item))
   const birth = event('birth')
   const home = event('home', item => item.id === birth?.parent)

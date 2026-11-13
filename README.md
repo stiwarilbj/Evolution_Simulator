@@ -19,7 +19,7 @@ Open the link shown in your terminal.
 
 - **World** plays a day. Click a blob to follow it, or use **Quick Sim** to skip ahead. The speed colors use the same scale across the run. If the last blob dies, click the extinction tile to watch the ending.
 - **Settings** lets you make species and choose how much their traits can change.
-- **Trends** shows how the population and its traits change over time. Compare sight ranges or see how many blobs are each age.
+- **Trends** shows the blobs that start each day. See the average and spread, switch to dusk, or watch the sight example.
 - **About → Walkthrough** shows the ideas from the video. Try a stride race or watch a newborn blob search for food.
 - **About → Experiments** runs the 600-generation size test from the video. Compare size changes and watch hunts from each run.
 

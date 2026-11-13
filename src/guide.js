@@ -21,8 +21,8 @@ export const lessons = [
     text:'With ten plants each day, this example loses its last blobs on Day 4. The cream tile marks the last scene.' },
   { id:'offspring', title:'A newborn’s sight', timestamp:241, example:'offspring',
     text:'Watch a parent settle, meet its newborn, then follow the young blob the next day. In this example, the child inherits a much shorter sense range.' },
-  { id:'trends', title:'Reading the results', timestamp:302,
-    text:'Trends shows how population, age, and traits change. Each flower in the World timeline summarizes a completed day.' },
+  { id:'trends', title:'Reading the results', timestamp:302, example:'sight-comparison',
+    text:'Trends shows the blobs that start each day. Compare the sight circles on Day 1 and Day 648 to see how sight changed during a 1,000-day run.' },
 ]
 
 export const guidedExamples = {
@@ -46,6 +46,8 @@ export const guidedExamples = {
     text:'Watch the last two blobs lose their chance to survive in a four-day scarcity experiment.' },
   offspring: { title:'From parent to offspring', source:'offspring', camera:'close', layers:{ sense:true, vision:true },
     text:'Follow one family from the parent’s last few steps to its offspring’s first search for food.' },
+  'sight-comparison': { title:'Sight across generations', source:'sight-comparison', camera:'overhead', layers:{ sense:true },
+    text:'Compare the blue sight circles at the start and on Day 648 of a 1,000-day run recreated with seed 118.' },
 }
 
 export const videoAt = second => 'https://www.youtube.com/watch?v=6nMo8T3T0L4&t=' + second + 's'

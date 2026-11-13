@@ -48,6 +48,24 @@ export function metricValue(row, key) {
   return key === 'population' ? row?.population : row?.[key]?.mean
 }
 
+const cohortKeys = ['age', 'speed', 'size', 'sense']
+
+export function openingTrends(run) {
+  const founders = run.checkpoints.find(point => point.day === 0)?.roster ?? []
+  return run.summaries.map(({ day, rows }, index) => {
+    // Each day's opening roster is the preceding day's survivors and newborns.
+    const previous = run.summaries[index - 1]?.rows
+    const scopes = Object.entries(rows).map(([scope, row]) => {
+      const roster = index === 0 ? founders.filter(blob => scope === 'all' || blob.species === scope) : []
+      const traits = Object.fromEntries(cohortKeys.map(key => [
+        key, previous?.[scope]?.[key] ?? distribution(roster.map(blob => blob[key])),
+      ]))
+      return [scope, { ...row, ...traits, population: row.opening }]
+    })
+    return { day, rows: Object.fromEntries(scopes) }
+  })
+}
+
 export function runSpeedRange(run) {
   let min = Infinity, max = -Infinity
   for (const species of run.setup.species) if (species.enabled) {

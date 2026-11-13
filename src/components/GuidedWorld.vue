@@ -2,11 +2,11 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { Aperture, Pause, Play, RotateCcw } from 'lucide-vue-next'
 import { guidedExamples } from '../guide.js'
-import { guideSource, lessonMoments } from '../guide-replay.js'
+import { guideSource, lessonMoments, SIGHT_EXAMPLE_DAYS, SIGHT_EXAMPLE_LATER_DAY } from '../guide-replay.js'
 import { travel, WALKTHROUGH_STEP } from '../engine/geometry.js'
-import { format } from '../engine/stats.js'
+import { distribution, format } from '../engine/stats.js'
 import { trackFrame } from '../track.js'
-import { useLab } from '../store.js'
+import { prepareExperiment, useLab } from '../store.js'
 import Board from './Board.vue'
 import ExtinctionIcon from './ExtinctionIcon.vue'
 
@@ -19,8 +19,12 @@ const source = computed(() => guideSource(spec.value.source))
 const moments = shallowRef([])
 const step = ref(0), elapsed = ref(0), selected = ref(null), playing = ref(false)
 const focus = ref(false), busy = ref(true), error = ref('')
-let animation, previous, request = 0
+const preparedDay = ref(0)
+let animation, previous, loading
+const sightExample = computed(() => props.example === 'sight-comparison')
 const moment = computed(() => moments.value[step.value])
+const openingSight = computed(() => sightExample.value && moment.value
+  ? distribution(moment.value.track.opening.map(blob => blob.sense)) : null)
 const duration = computed(() => moment.value?.hold ?? ((moment.value?.to ?? 0) - (moment.value?.from ?? 0)))
 const frame = computed(() => moment.value && trackFrame(moment.value.track, Math.min(moment.value.to, moment.value.from + elapsed.value)))
 const creature = computed(() => frame.value?.blobs.find(blob => blob.id === selected.value))
@@ -38,9 +42,9 @@ function pause() {
   playing.value = false
   cancelAnimationFrame(animation)
 }
-function jump(index) {
+function jump(index, preview = false) {
   step.value = index
-  elapsed.value = 0
+  elapsed.value = preview ? moment.value.preview ?? 0 : 0
   selected.value = moment.value.blob ?? null
   focus.value = Boolean(spec.value.layers?.vision && moment.value.vision !== false)
 }
@@ -50,48 +54,63 @@ function tick(now) {
   previous = now
   elapsed.value = Math.min(duration.value, elapsed.value + delta)
   if (elapsed.value >= duration.value) {
-    if (end.value) { pause(); return }
+    if (sightExample.value || end.value) { pause(); return }
     jump(step.value + 1)
   }
   animation = requestAnimationFrame(tick)
 }
 function play() {
   if (!moment.value) return
-  if (end.value) jump(0)
+  if (elapsed.value >= duration.value && sightExample.value) jump(step.value)
+  else if (end.value) jump(0)
   previous = 0
   playing.value = true
   animation = requestAnimationFrame(tick)
 }
 function restart() {
   pause()
-  jump(0)
+  jump(sightExample.value ? step.value : 0)
   if (!reduced.matches) play()
 }
 function choose(index) {
   pause()
-  jump(index)
-  if (!reduced.matches) play()
+  jump(index, sightExample.value)
+  if (!reduced.matches && !sightExample.value) play()
 }
 async function load() {
-  const token = ++request
-  const run = source.value
+  loading?.abort()
+  const controller = new AbortController()
+  loading = controller
+  const { signal } = controller
+  let run = source.value
   const example = props.example
+  const isSight = sightExample.value
+  const firstDay = spec.value.day ?? 1
   pause()
   busy.value = true
   error.value = ''
+  preparedDay.value = 0
   moments.value = []
   step.value = 0
   try {
-    const track = await lab.getTrack(run, spec.value.day ?? 1)
-    const next = example === 'offspring' ? await lab.getTrack(run, 2) : undefined
-    if (token !== request) return
+    if (isSight) {
+      run = await prepareExperiment(run.setup, signal, day => {
+        if (day % 25 === 0) preparedDay.value = day
+      })
+      if (run.summaries.at(-1)?.day !== SIGHT_EXAMPLE_DAYS) throw new Error('The sight example ended early.')
+    }
+    const secondDay = isSight ? SIGHT_EXAMPLE_LATER_DAY : example === 'offspring' ? 2 : null
+    const [track, next] = await Promise.all([
+      lab.getTrack(run, firstDay), secondDay && lab.getTrack(run, secondDay),
+    ])
+    if (signal.aborted) return
     moments.value = lessonMoments(example, track, next)
-    jump(0)
-    if (!reduced.matches) play()
+    jump(0, isSight)
+    if (!reduced.matches && !isSight) play()
   } catch {
-    if (token === request) error.value = 'This example could not load.'
+    if (!signal.aborted) error.value = 'This example could not load.'
   } finally {
-    if (token === request) busy.value = false
+    if (!signal.aborted) busy.value = false
   }
 }
 function pauseWhenHidden() {
@@ -100,7 +119,7 @@ function pauseWhenHidden() {
 watch(() => props.example, load, { immediate:true })
 onMounted(() => document.addEventListener('visibilitychange', pauseWhenHidden))
 onBeforeUnmount(() => {
-  ++request
+  loading?.abort()
   pause()
   document.removeEventListener('visibilitychange', pauseWhenHidden)
 })
@@ -110,7 +129,7 @@ onBeforeUnmount(() => {
   <main class="guided-world" aria-labelledby="example-title">
     <header class="guided-heading">
       <div><span class="quiet">Guided World · Day {{ day }}</span><h1 id="example-title">{{ spec.title }}</h1></div>
-      <button class="secondary" @click="emit('exit')">Back to walkthrough</button>
+      <button class="secondary" @click="emit('exit')">{{ sightExample?'Back to Trends':'Back to walkthrough' }}</button>
     </header>
     <div class="guided-stage" :class="{ 'guided-split':example==='energy' }">
       <div class="guided-board" :aria-busy="busy">
@@ -118,7 +137,7 @@ onBeforeUnmount(() => {
           :follow="selected!=null" :camera="spec.camera ?? 'board'" :speed-range="speedRange" scope="all"
           quality="efficient" @select="selected=$event"/>
         <div v-else class="stage-note">
-          <p role="status">{{ error || 'Preparing the example…' }}</p>
+          <p role="status">{{ error || (sightExample ? 'Preparing the sight example · Day '+preparedDay+' of 1,000' : 'Preparing the example…') }}</p>
           <button v-if="error" class="secondary" @click="load">Retry example</button>
         </div>
         <div v-if="moment && speedRange" class="speed-key" aria-label="Body color by speed">
@@ -147,11 +166,12 @@ onBeforeUnmount(() => {
       <span class="guided-time">{{ format(frame?.time,2) }} s</span>
       <button v-if="spec.layers?.vision" class="secondary" :disabled="!moment" :aria-pressed="focus" @click="focus=!focus"><Aperture :size="15"/> Sense focus</button>
     </div>
-    <div v-if="moments.length>1" class="guided-moments" aria-label="Family replay stages">
+    <div v-if="moments.length>1" class="guided-moments" role="group" :aria-label="sightExample?'Sight comparison stages':'Family replay stages'">
       <button v-for="(part,index) in moments" :key="part.label" class="secondary" :aria-pressed="step===index"
         @click="choose(index)">{{ part.label }}</button>
     </div>
     <p class="guided-summary">{{ spec.text }}
+      <span v-if="openingSight" class="quiet">Dawn sight · Mean {{ format(openingSight.mean) }} ± {{ format(openingSight.sd) }} · {{ openingSight.n }} blobs</span>
       <span v-if="creature" class="quiet">Blob #{{ creature.id }}
         <template v-if="example==='speed' || example==='stride'">
           · Size {{ format(creature.size) }} · Speed {{ format(creature.speed) }}

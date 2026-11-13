@@ -203,16 +203,27 @@ dd{margin:0;font-family:var(--mono);color:var(--cream);text-align:right}
 .trends-toolbar,.trend-subhead,.trend-options,.trend-filters,.trend-actions,.range-fields,.trend-tabs,.restore-plots{
   display:flex;flex-wrap:wrap;align-items:center;gap:10px;
 }
-.trends-toolbar,.trend-subhead{justify-content:space-between;padding:9px 0;border-top:1px solid var(--line)}
-.trend-filters label,.trend-options>label,.range-fields label,.trait-space label{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:14px}
+.trends-toolbar,.trend-subhead{justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)}
+.trend-filters label,.trend-option-fields label,.range-fields label,.trait-space label{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:14px}
+.trend-actions .secondary{border-color:transparent;background:transparent;padding-inline:8px;font-size:13px}
+.trend-actions .secondary:hover:not(:disabled){background:#ffffff09;color:var(--focus)}
 .trend-subhead{color:var(--quiet);font:13px var(--mono)}
 .trend-tabs button,.trend-options select{font-size:13px}
-.trend-options{border-top:1px solid var(--subtle);padding:8px 0 13px;color:var(--muted);gap:16px}
-.trend-options details{font-size:14px}.trend-options details[open]{background:#181817;border-radius:5px;padding:6px 9px}.trend-options details label{display:inline-flex;align-items:center;gap:4px;margin-right:12px}
+.trend-tabs .secondary{min-height:28px;padding:4px 8px;background:transparent;border-color:transparent}
+.trend-tabs .secondary[aria-pressed=true]{color:var(--focus);border-bottom-color:var(--rail)}
+.trend-options{align-items:baseline;padding:4px 0 8px;color:var(--quiet);gap:4px 16px;font:13px var(--mono)}
+.trend-options details{font:14px var(--sans);color:var(--muted)}
+.trend-options details[open]{flex-basis:100%;background:#181817;border-radius:5px;padding:8px 10px}
+.trend-option-fields{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:9px 0}
+.sight-link{margin-left:auto;color:#7ec1df;font:14px var(--sans)}
 .compact-plots,.secondary-plots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px 28px}
 .trend-plot{min-width:0;min-height:260px;position:relative;scroll-margin-top:18px}
-.walkthrough-plots .trend-plot{min-height:221px}
-.walkthrough-plots .chart-canvas{height:170px}
+.walkthrough-plots{row-gap:14px}
+.compact-plot{min-height:0}
+.compact-plot .chart-canvas{height:clamp(145px,calc((100dvh - 345px)/2),260px)}
+.compact-plot .plot-heading{justify-content:center;position:relative}
+.compact-plot .plot-focus{position:absolute;right:0}
+.compact-plot .chart-unit{position:absolute;width:1px;height:1px;min-height:0;padding:0;overflow:hidden;clip-path:inset(50%)}
 .plot-heading{display:flex;align-items:center;gap:8px;color:var(--plot);height:32px}
 .plot-heading h2{font-size:17px;color:inherit;text-transform:uppercase;letter-spacing:.025em}
 .chart-hide{width:16px;height:16px;display:grid;place-items:center;padding:0;border-radius:3px;background:var(--plot);color:#1b1b1b;flex:none}
@@ -226,16 +237,6 @@ dd{margin:0;font-family:var(--mono);color:var(--cream);text-align:right}
 .chart-keys button{display:flex;align-items:center;gap:5px;padding:3px 1px;font-size:12px}
 .chart-keys button[aria-pressed=false]{opacity:.58;text-decoration:line-through}
 .chart-keys i{width:15px;border-top:2px solid}
-.plot-guide{order:1;align-self:center;max-width:265px;padding:12px 0 12px 18px;border-left:1px solid var(--line);color:var(--muted);font-size:13px}
-.plot-guide h2{margin-bottom:9px;font-size:15px}
-.plot-guide dl{display:grid;gap:5px}
-.plot-guide dt{display:flex;align-items:center;gap:9px;color:var(--cream)}
-.plot-guide dd{margin:0 0 0 34px;color:var(--muted);font-family:inherit;text-align:left}
-.plot-guide i{width:25px;flex:none;border-top:2px solid #eeedd6}
-.plot-guide .trace-upper,.plot-guide .trace-lower{border-top:1.5px solid #eeedd6a6}
-.plot-guide .trace-lower{border-top-style:dashed}
-.plot-guide .trace-edge{border-top:1px dotted #eeedd666}
-.plot-guide p{margin-top:10px;color:var(--quiet)}
 .overview{border-block:1px solid var(--line);padding:14px 0 17px;margin:20px 0 22px;position:relative}
 .overview-mode{float:right;margin-left:8px;font-size:12px;min-height:30px;position:relative;z-index:1}
 .overview>.compact-plots{clear:both}
@@ -243,7 +244,8 @@ dd{margin:0;font-family:var(--mono);color:var(--cream);text-align:right}
 .restore-plots{margin:4px 0 13px}.restore-plots button{font-size:13px}
 .notice,.pinned-summary{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 15px;margin:6px 0 13px;border:1px solid var(--line);background:#1d1d1b;border-radius:5px;color:var(--muted)}
 .pinned-summary div{flex:1 1 255px}.pinned-summary small{display:block;margin-top:4px}.pinned-summary strong{font:16px var(--mono);color:var(--cream)}
-.sight-comparison{margin:0 0 14px;padding:8px 12px;border:1px solid var(--line);border-radius:5px;background:#1d1d1b}
+.sight-comparison{margin:0 0 8px;font-size:14px}
+.sight-comparison[open]{padding:8px 12px;border:1px solid var(--line);border-radius:5px;background:#1d1d1b}
 .sight-comparison summary{cursor:pointer;color:#7EC1DF}
 .sight-comparison p{margin:8px 0;font-size:14px}
 .sight-days{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:10px;margin-top:10px}
@@ -525,10 +527,6 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
   .trend-actions .secondary{font-size:12px;min-height:32px;padding:4px 7px;gap:4px}
   .trend-actions .icon{width:32px;height:32px}
   .compact-plots,.secondary-plots{grid-template-columns:1fr;gap:15px}
-  .plot-guide{order:0;max-width:none;padding:6px 0 6px 11px}
-  .plot-guide dl{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 8px}
-  .plot-guide dd{display:none}
-  .plot-guide p{margin-top:6px}
   .trait-space>div:has(canvas){flex-direction:column;gap:5px}.trait-space>div:has(canvas)>div{min-height:260px}.trait-space aside{flex:auto}
   .settings-close{top:8px;right:10px}
   .settings-form{padding:49px 12px 28px}
