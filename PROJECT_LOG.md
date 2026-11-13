@@ -75,3 +75,4 @@
 - Added independent days, timelines, and camera angles to Compare, kept those choices in its URL, and staged the seed 118 Day 6 hunter versus Day 77 forager sequence with timed dimming and camera cuts.
 - Made the staged split-screen sequence fill the viewport, reset reveal and follow before the camera cuts, loop both independent replays, and add Stop and Escape controls.
 - Moved a focused Trends chart into the plot grid and added an inline Age walkthrough that compares temporary seed 118 runs at 600 and 100 days without changing the active run.
+- Centered the Age chart in the viewport when the walkthrough opens or switches between the long and short run, while honoring reduced-motion preferences.

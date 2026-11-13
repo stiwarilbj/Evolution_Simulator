@@ -158,6 +158,12 @@ function jump(event) {
 }
 function focus(key) { focused.value=focused.value===key?null:key }
 function customRange(a,b) { from.value=a; to.value=b; range.value='custom' }
+function centerAgeChart() {
+  nextTick(()=>document.getElementById('chart-age')?.scrollIntoView({
+    behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',
+    block:'center'
+  }))
+}
 async function prepareAgePhase(phase) {
   if(ageDemoProgress.value) return
   if(ageDemoRuns.value[phase]?.length===2) { ageDemoPhase.value=phase; range.value='all'; return }
@@ -198,6 +204,7 @@ function startAgeDemo() {
     spread:spread.value,hidden:hidden.value,order:order.value,pin:pin.value}
   ageDemoVisible.value=true
   focused.value='age'
+  centerAgeChart()
   cohort.value='dusk'
   spread.value='sd'
   hidden.value=hidden.value.filter(key=>!basic.includes(key))
@@ -230,6 +237,7 @@ function closeAgeDemo() {
 function changeAgePhase(phase) {
   if(ageDemoProgress.value) return
   void prepareAgePhase(phase)
+  centerAgeChart()
 }
 const ageReadings=computed(()=>['long','short'].map(phase=>{
   const run=ageDemoRuns.value[phase]?.[0]
