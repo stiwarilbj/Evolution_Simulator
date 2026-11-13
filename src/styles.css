@@ -410,14 +410,15 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
 .quick-picks{gap:3px}.quick-picks button,.seed-actions button{font-size:10px;min-height:24px;padding:2px 6px}
 .final-fields>.quick-picks,.final-fields>.seed-actions{grid-column:1/-1}
 .final-fields>.quiet{text-align:left;grid-column:1/-1;font-size:9px;line-height:1.1}
-.start-modes button{display:flex;flex-direction:column;align-items:start;text-align:left;padding:4px 7px;min-height:39px}
-.start-modes small{display:block;color:var(--muted);line-height:1.15;font-size:10px}
+.start-modes{margin:3px auto}
+.start-modes button{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:5px;text-align:center;padding:3px 6px;min-height:29px}
+.start-modes button strong{font-size:10px}
+.start-modes small{display:block;color:var(--muted);line-height:1.15;font-size:9px}
 .run-options{max-width:600px;margin:3px auto 0;text-align:center}
 .run-options>summary{display:inline-flex;align-items:center;justify-content:center;min-height:24px;padding:1px 7px;color:var(--muted);font:11px var(--mono);list-style:none;border:1px solid var(--line);border-radius:4px}
 .run-options>summary::-webkit-details-marker{display:none}
 .run-options>summary::after{content:'+';margin-left:6px;color:var(--focus)}
 .run-options[open]>summary::after{content:'−'}
-.run-options>.start-modes{margin:4px auto}
 .run-options .advanced{max-width:none}
 .run-options .run-mode{display:flex;align-items:center;justify-content:center;gap:8px;margin:5px auto;color:var(--muted);font-size:11px}
 .run-options .run-mode select{min-height:27px;padding:2px 6px;font-size:11px}

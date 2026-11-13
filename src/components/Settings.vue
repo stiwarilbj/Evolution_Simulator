@@ -222,7 +222,11 @@ onMounted(()=>dialog.value.showModal())
             <button type="button" class="secondary" @click="copySeed"><component :is="copied ? Check : Copy" :size="16"/>{{ copied ? 'Copied' : 'Copy seed' }}</button>
           </div>
         </div>
-        <small v-if="endsWhenSettled(draft)" class="quiet run-days-note">Days end when creatures settle. Open Run mode to change this.</small>
+        <small v-if="endsWhenSettled(draft)" class="quiet run-days-note">Days end when creatures settle.</small>
+        <div class="start-modes" aria-label="Playback mode">
+          <button v-for="[mode,name,body] in [['prepare','Prepare and watch','Build the archive in the background.'],['live','Watch live','Run each tick as you watch.']]" :key="mode" type="button"
+            class="secondary" :aria-pressed="draft.mode===mode" @click="draft.mode=mode"><strong>{{ name }}</strong><small>{{ body }}</small></button>
+        </div>
         <details class="run-options">
           <summary>Run mode</summary>
           <label v-if="draft.version >= SETTLED_RULE_VERSION" class="run-mode">End each day
@@ -231,10 +235,6 @@ onMounted(()=>dialog.value.showModal())
               <option value="timed">After a fixed time</option>
             </select>
           </label>
-          <div class="start-modes">
-            <button v-for="[mode,name,body] in [['prepare','Prepare and watch','Build the archive in the background.'],['live','Watch live','Run each tick as you watch.']]" :key="mode" type="button"
-              class="secondary" :aria-pressed="draft.mode===mode" @click="draft.mode=mode"><strong>{{ name }}</strong><small>{{ body }}</small></button>
-          </div>
         </details>
         <div class="advanced setting-inset">
           <button type="button" class="secondary" :aria-expanded="advanced" @click="advanced=!advanced">Advanced Rules {{ advanced ? '▴' : '▾' }}</button>
