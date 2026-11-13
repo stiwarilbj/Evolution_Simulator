@@ -218,7 +218,10 @@ function cutVideoScene() {
   sequenceStep.value=0
   sequence.value=true
   cameras.value=['close','overhead']
+  selections.value=[null,null]
   emphasis.value='left'
+  reveal.value=false
+  divider.value=50
   play()
   const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const interval=reduced ? 6000 : 4000
