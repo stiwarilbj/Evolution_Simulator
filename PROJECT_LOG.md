@@ -68,6 +68,6 @@
 ## 2026-11-13
 
 - Matched the five Trends plots to the video with shaded spread bands and dawn stats. Kept dusk and percentiles in Chart options. Added an overhead sight example with Days 1 and 648 from a separate 1,000-day run.
-- Condensed Settings into a narrow, one-view setup with aligned founder and trait controls, small color-coded mutation sliders, and side-by-side Energy and Food fields. Removed the founder preview, moved run mode and advanced rules into a disclosure, and made Evolve prominent on phones.
+- Condensed Settings into a narrow, one-view setup with aligned founder and trait controls, small color-coded mutation sliders, and side-by-side Energy and Food fields. Removed the founder preview, tucked run mode away, kept Advanced Rules accessible, and made Evolve prominent on phones.
 - Added independent days, timelines, and camera angles to Compare, kept those choices in its URL, and staged the seed 118 Day 6 hunter versus Day 77 forager sequence with timed dimming and camera cuts.
 - Moved a focused Trends chart into the plot grid and added an inline Age walkthrough that compares temporary seed 118 runs at 600 and 100 days without changing the active run.
