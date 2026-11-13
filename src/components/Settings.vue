@@ -164,9 +164,10 @@ onMounted(()=>dialog.value.showModal())
                 :min="standardDeviation ? 0 : .01" :max="10" :step=".01" :pace="1" :tint="swatches[key]"
                 :disabled="!selected.mutation[key]" :error="issue[selected.id+'.'+spreadKey+'.'+key]" compact/>
               <div class="variance-meta mutation-meta">
-                <small v-if="Number.isFinite(selected[spreadKey][key])">
-                  {{ standardDeviation ? 'σ '+selected[spreadKey][key]+' · σ² '+Number((selected[spreadKey][key] ** 2).toFixed(3)) : 'σ '+Math.sqrt(selected[spreadKey][key]).toFixed(2) }}
-                </small>
+                <template v-if="Number.isFinite(selected[spreadKey][key])">
+                  <small>{{ standardDeviation ? 'σ = '+selected[spreadKey][key] : 'σ = '+Math.sqrt(selected[spreadKey][key]).toFixed(2) }}</small>
+                  <small>Variance (σ²) = {{ standardDeviation ? Number((selected[spreadKey][key] ** 2).toFixed(3)) : selected[spreadKey][key] }}</small>
+                </template>
                 <label><input type="checkbox" v-model="selected.mutation[key]" :aria-label="'Allow '+key+' mutation'"> Mutate</label>
               </div>
             </div>
