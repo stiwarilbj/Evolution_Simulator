@@ -7,7 +7,7 @@ import { format } from '../engine/stats.js'
 
 Chart.register(LineController,LineElement,PointElement,BarController,BarElement,LinearScale,CategoryScale,Tooltip,Filler)
 const props = defineProps({ id:String, title:String, rows:Array, series:Array, unit:String, color:String,
-  pin:Number, focus:Boolean, right:Boolean, hideable:Boolean, legend:Boolean, guide:Number, scope:String, annotations:Array, compact:Boolean })
+  pin:Number, focus:Boolean, spotlight:Boolean, right:Boolean, hideable:Boolean, legend:Boolean, guide:Number, scope:String, annotations:Array, compact:Boolean })
 const emit = defineEmits(['hide','focus','pin','watch','range'])
 const canvas = ref(), hovered = ref(null)
 let chart, brush, ignoreClick = false
@@ -192,13 +192,13 @@ function downloadChart() {
 }
 </script>
 <template>
-  <article class="trend-plot" :class="{ 'focused-plot':focus, 'compact-plot':compact }" :style="{'--plot':color || '#EEEDD6'}"
+  <article class="trend-plot" :class="{ 'focused-plot':focus || spotlight, 'spotlight-plot':spotlight, 'compact-plot':compact }" :style="{'--plot':color || '#EEEDD6'}"
     :aria-label="title+' chart'" :id="focus ? undefined : 'chart-'+title.toLowerCase().replaceAll(' ','-')">
     <header class="plot-heading">
-      <button v-if="hideable && !focus" class="chart-hide" :aria-label="'Hide '+title" @click="emit('hide')"><Minus :size="13"/></button>
+      <button v-if="hideable && !focus && !spotlight" class="chart-hide" :aria-label="'Hide '+title" @click="emit('hide')"><Minus :size="13"/></button>
       <h2>{{ title }}</h2>
-      <button class="icon plot-focus" :aria-label="focus ? 'Close focus chart' : 'Focus '+title" @click="emit('focus')">
-        <Minimize2 v-if="focus" :size="16"/><Maximize2 v-else :size="16"/>
+      <button class="icon plot-focus" :aria-label="focus || spotlight ? 'Close focus chart' : 'Focus '+title" @click="emit('focus')">
+        <Minimize2 v-if="focus || spotlight" :size="16"/><Maximize2 v-else :size="16"/>
       </button>
     </header>
     <div class="chart-unit">{{ unit }}</div>
@@ -212,7 +212,7 @@ function downloadChart() {
         <i :style="{borderColor:s.color,borderTopStyle:s.dash?'dashed':'solid'}"></i>{{ s.label }}
       </button>
     </div>
-    <div v-if="focus" class="focused-actions">
+    <div v-if="focus || spotlight" class="focused-actions">
       <button class="secondary" :disabled="!active" @click="emit('pin',active)">Pin day</button>
       <button class="secondary" @click="downloadChart">Download chart PNG</button>
     </div>

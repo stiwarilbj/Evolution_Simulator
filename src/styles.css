@@ -217,8 +217,13 @@ dd{margin:0;font-family:var(--mono);color:var(--cream);text-align:right}
 .trend-option-fields{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:9px 0}
 .sight-link{margin-left:auto;color:#7ec1df;font:14px var(--sans)}
 .compact-plots,.secondary-plots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px 28px}
+.compact-plots:not(.spotlight-layout)>.spotlight-plot,.secondary-plots>.spotlight-plot{grid-column:1 / -1}
 .trend-plot{min-width:0;min-height:260px;position:relative;scroll-margin-top:18px}
 .walkthrough-plots{row-gap:14px}
+.spotlight-layout{grid-template-rows:repeat(2,minmax(175px,auto));align-items:stretch;gap:13px 24px}
+.spotlight-layout .spotlight-plot{grid-column:2;grid-row:1 / span 2;min-height:430px;display:flex;flex-direction:column;border:1px solid #514a31;border-radius:5px;padding:8px;background:#191918}
+.spotlight-layout .spotlight-plot .chart-canvas{height:auto;min-height:300px;flex:1}
+.spotlight-layout .spotlight-plot .chart-keys{margin-top:6px}
 .compact-plot{min-height:0}
 .compact-plot .chart-canvas{height:clamp(145px,calc((100dvh - 345px)/2),260px)}
 .compact-plot .plot-heading{justify-content:center;position:relative}
@@ -253,6 +258,23 @@ dd{margin:0;font-family:var(--mono);color:var(--cream);text-align:right}
 .sight-days h3{font-size:15px;color:var(--cream)}
 .sight-days dl{display:flex;flex-wrap:wrap;gap:8px 20px;margin:8px 0 10px;font-size:13px}
 .sight-days dt{color:var(--muted)}.sight-days dd{text-align:left;color:#7EC1DF}
+.age-demo-link{color:#FADE69}
+.age-walkthrough{margin:8px 0 14px;padding:12px 15px;border:1px solid #514a31;border-radius:6px;background:linear-gradient(115deg,#252319,#1b1b19 45%);color:var(--muted)}
+.age-walkthrough>header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.age-walkthrough>header>div{min-width:0}
+.age-walkthrough .age-step{font:11px var(--mono);letter-spacing:.12em;color:#FADE69}
+.age-walkthrough h2{margin:3px 0;color:#FADE69;font-size:19px}
+.age-walkthrough p{margin:4px 0;font-size:14px}
+.age-demo-controls{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-top:9px}
+.age-demo-controls button[aria-pressed=true]{border-color:#FADE69;color:#FADE69;background:#FADE6910}
+.age-demo-controls .quiet{font-size:13px}
+.age-demo-progress{display:block;width:min(100%,560px);height:5px;margin-top:8px;accent-color:#FADE69}
+.age-demo-error{color:#F0A39B;font-size:13px}
+.age-demo-readouts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+.age-demo-readouts>div{display:grid;gap:4px;padding:8px 10px;border:1px solid #49463b;border-radius:4px;background:#141413;font-size:13px}
+.age-demo-readouts strong{color:var(--age-ink);font-size:14px}
+.age-demo-readouts small{color:var(--quiet)}
+.age-demo-note{margin-top:9px!important;color:var(--quiet);font-size:12px!important}
 .focus-backdrop{position:fixed;inset:0;display:grid;align-items:center;justify-items:center;padding:18px;z-index:16;background:#080808c9;backdrop-filter:blur(4px)}
 .focus-backdrop .trend-plot{width:min(1050px,100%);padding:17px;background:var(--stage);border-radius:7px;border:1px solid var(--line)}
 .focused-plot .chart-canvas{height:min(45vh,480px)}
@@ -674,3 +696,14 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
 }
 
 @media(max-width:470px){.stat-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.stat{display:flex}}
+@media(max-width:700px){
+  .spotlight-layout{grid-template-columns:1fr;grid-template-rows:auto;gap:15px}
+  .spotlight-layout .spotlight-plot{grid-column:auto;grid-row:auto;min-height:0}
+  .spotlight-layout .spotlight-plot .chart-canvas{height:clamp(260px,45vh,420px);min-height:0;flex:none}
+  .age-demo-readouts{grid-template-columns:1fr}
+}
+@media(min-width:701px) and (max-width:950px){
+  .spotlight-layout{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto}
+  .spotlight-layout .spotlight-plot{grid-column:1 / -1;grid-row:auto;min-height:0}
+  .spotlight-layout .spotlight-plot .chart-canvas{height:min(45vh,360px);min-height:240px;flex:none}
+}
