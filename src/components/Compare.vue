@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ChevronLeft, ChevronRight, Pause, Play, Scan } from 'lucide-vue-next'
 import Board from './Board.vue'
 import TrendPlot from './TrendPlot.vue'
@@ -31,6 +31,7 @@ const tracks=ref([null,null]), pending=ref([false,false]), errors=ref(['','']), 
 const cameras=ref([props.initial?.leftCamera ?? 'board',props.initial?.rightCamera ?? 'board']), scope=ref('all'), layers=ref({sense:false}), focus=ref('')
 const reveal=ref(false), divider=ref(50), emphasis=ref('both')
 const sequence=ref(false), sequenceStep=ref(0), videoPairProgress=ref(null), videoPairError=ref('')
+const sequenceButton=ref(null), sequenceStopButton=ref(null)
 const selections=ref([null,null]), boards=[]
 let jobs=[0,0], animations=[null,null], previous=[0,0], sequenceTimer, sequenceController
 let videoPairController
@@ -106,6 +107,11 @@ function animate(index,time) {
   if (previous[index] && track) fractions.value[index]=Math.min(1,fractions.value[index]+Math.min(.1,(time-previous[index])/1000)/Math.max(track.duration,.001))
   previous[index]=time
   if (fractions.value[index]<1) animations[index]=requestAnimationFrame(next=>animate(index,next))
+  else if (sequence.value) {
+    fractions.value[index]=0
+    previous[index]=time
+    animations[index]=requestAnimationFrame(next=>animate(index,next))
+  }
   else stop(index)
 }
 function play(index=null) {
@@ -225,10 +231,18 @@ function cutVideoScene() {
   },interval)
 }
 function stopVideoSequence() {
+  const wasPlayingSequence=sequence.value
   sequence.value=false
   clearInterval(sequenceTimer)
   sequenceTimer=null
   stop()
+  if (wasPlayingSequence) nextTick(()=>sequenceButton.value?.isConnected && sequenceButton.value.focus())
+}
+function stopSequenceOnEscape(event) {
+  if (event.key==='Escape' && sequence.value) {
+    event.preventDefault()
+    stopVideoSequence()
+  }
 }
 function interruptSequence() {
   if (sequence.value) stopVideoSequence()
@@ -274,11 +288,15 @@ onBeforeUnmount(()=>{
   jobs=[jobs[0]+1,jobs[1]+1]
   stopVideoSequence()
   videoPairController?.abort()
+  window.removeEventListener('keydown',stopSequenceOnEscape)
 })
+onMounted(()=>window.addEventListener('keydown',stopSequenceOnEscape))
+watch(sequence,active=>{ if(active) nextTick(()=>sequenceStopButton.value?.focus()) })
 </script>
 
 <template>
-  <main class="compare-page" @keydown.esc="focus=''">
+  <Teleport to="body" :disabled="!sequence">
+  <main class="compare-page" :class="{ 'cinematic-sequence':sequence }" @keydown.esc="sequence ? stopVideoSequence() : focus=''">
     <header><h1>Compare runs</h1><button class="secondary" @click="emit('library')">Run Library</button></header>
     <div class="compare-selects">
       <label v-for="(name,index) in names" :key="name" :class="index===0 ? 'run-left' : 'run-right'">{{ name }}
@@ -316,7 +334,7 @@ onBeforeUnmount(()=>{
         <button class="secondary" :disabled="!!videoPairProgress" @click="prepareVideoScene">
           {{ videoPair ? 'Stage video moments · Day 6 / 77' : 'Create seed 118 video pair · 100 days' }}
         </button>
-        <button class="primary" :disabled="!sequenceReady" :aria-pressed="sequence" @click="cutVideoScene">{{ sequenceButtonText }}</button>
+        <button ref="sequenceButton" class="primary" :disabled="!sequenceReady" :aria-pressed="sequence" @click="cutVideoScene">{{ sequenceButtonText }}</button>
         <button v-if="videoPairProgress && !videoPairProgress.saving" class="secondary" @click="cancelVideoPair">Cancel setup</button>
         <span v-if="videoPairProgress" role="status">{{ videoPairProgress.saving ? 'Saving the two runs…' : `Building ${videoPairProgress.side===0 ? 'wide' : 'narrow'} run · Day ${videoPairProgress.day} / 100` }}</span>
         <span v-else-if="videoPairError" role="status">{{ videoPairError }}</span>
@@ -343,6 +361,7 @@ onBeforeUnmount(()=>{
             :camera="cameras[index]" :scope="scope" :dim="scope!=='all'" :selected="selections[index]" :follow="selections[index]!=null" @select="selections[index]=$event"/>
           <h2>{{ run.setup.name }} <small>Day {{ days[index] }} · Seed {{ run.setup.seed }} · {{ format(frames[index]?.time,1) }} s</small></h2>
         </section>
+        <button v-if="sequence" ref="sequenceStopButton" class="primary sequence-stop" @click="stopVideoSequence">Stop video sequence</button>
         <div v-if="pending.some(Boolean)||errors.some(Boolean)" class="stage-note">
           <p role="status">{{ errors.find(Boolean) || 'Building paired replays…' }}</p>
           <button v-if="errors.some(Boolean)" class="secondary" @click="retryTracks">Retry replays</button>
@@ -382,4 +401,5 @@ onBeforeUnmount(()=>{
       </div>
     </template>
   </main>
+  </Teleport>
 </template>

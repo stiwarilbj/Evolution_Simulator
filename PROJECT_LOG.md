@@ -73,4 +73,5 @@
 - Kept mutation spread fields and trait fields distinct by name, with clear accessible mutation toggles.
 - Kept the mutation readout explicit about variance and standard deviation.
 - Added independent days, timelines, and camera angles to Compare, kept those choices in its URL, and staged the seed 118 Day 6 hunter versus Day 77 forager sequence with timed dimming and camera cuts.
+- Made the staged split-screen sequence fill the viewport, loop both independent replays through its camera cuts, and added Stop and Escape controls.
 - Moved a focused Trends chart into the plot grid and added an inline Age walkthrough that compares temporary seed 118 runs at 600 and 100 days without changing the active run.
