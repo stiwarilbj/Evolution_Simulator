@@ -84,3 +84,4 @@
 - Made Close view zoom in on the board before a creature is selected, and made Fit both boards restore the field camera.
 - Kept the Age walkthrough’s preparation controls on screen, hid live-run charts until its reference is ready, and protected retry and cancel state from late worker results.
 - Added browser checks for the Compare day and camera controls and for Age walkthrough failure, retry, cancel, and run changes.
+- Kept Compare’s independent day input editable until blur, then committed and normalized the selected day. This prevents slow browser updates from reverting typed days.

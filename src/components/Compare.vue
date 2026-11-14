@@ -25,6 +25,7 @@ const days=ref([
   Number.isInteger(props.initial?.leftDay) ? props.initial.leftDay : initialDay,
   Number.isInteger(props.initial?.rightDay) ? props.initial.rightDay : initialDay,
 ])
+const dayInputs=ref([...days.value])
 const day=ref(initialDay), fractions=ref([0,0]), playing=ref([false,false])
 const replayAvailable=computed(()=>leftId.value!==rightId.value && runs.value.every((run,index)=>run && days.value[index]>=1 && days.value[index]<=runDays.value[index]))
 const tracks=ref([null,null]), pending=ref([false,false]), errors=ref(['','']), replayAttempt=ref([0,0])
@@ -149,9 +150,13 @@ function changeDay(event) {
   seekDay(event.target.valueAsNumber)
   event.target.value=day.value
 }
-function changeSideDay(event,index) {
-  seekDay(event.target.valueAsNumber,index)
-  event.target.value=days.value[index]
+function changeSideDay(index) {
+  const requested=Number(dayInputs.value[index])
+  const value=Number.isInteger(requested) && requested>=1
+    ? Math.min(runDays.value[index],requested)
+    : days.value[index]
+  seekDay(value,index)
+  dayInputs.value[index]=days.value[index]
 }
 function seekBothTime(value) {
   stop()
@@ -274,6 +279,7 @@ function retryTracks() {
   for (let index=0;index<2;index++) if (errors.value[index]) replayAttempt.value[index]++
 }
 watch([leftId,rightId],()=>{ scope.value='all' })
+watch([()=>days.value[0],()=>days.value[1]],values=>{ dayInputs.value=[...values] })
 watch([leftId,()=>days.value[0],()=>replayAttempt.value[0],replayAvailable],()=>{ void loadTrack(0) },{immediate:true})
 watch([rightId,()=>days.value[1],()=>replayAttempt.value[1],replayAvailable],()=>{ void loadTrack(1) },{immediate:true})
 watch(()=>[runDays.value[0],runDays.value[1]],limits=>{
@@ -346,7 +352,7 @@ watch(sequence,active=>{ if(active) nextTick(()=>sequenceStopButton.value?.focus
       <div class="paired-day-controls" aria-label="Independent board controls">
         <section v-for="(run,index) in runs" :key="index" :class="index===0?'run-left':'run-right'">
           <strong>{{ index===0?'Left':'Right' }} · {{ run.setup.name }}</strong>
-          <label>Day <input :value="days[index]" type="number" min="1" :max="runDays[index]" :aria-label="(index===0?'Left':'Right')+' day'" @change="changeSideDay($event,index)"> of {{ runDays[index] }}</label>
+          <label>Day <input v-model.number="dayInputs[index]" type="number" min="1" :max="runDays[index]" :aria-label="(index===0?'Left':'Right')+' day'" @change="changeSideDay(index)"> of {{ runDays[index] }}</label>
           <label>Camera <select v-model="cameras[index]" :aria-label="(index===0?'Left':'Right')+' camera angle'" @change="interruptSequence"><option value="board">Field view</option><option value="overhead">Overhead</option><option value="close">Close view</option></select></label>
           <button class="icon" :aria-label="playing[index]?'Pause '+(index===0?'left':'right')+' board':'Play '+(index===0?'left':'right')+' board'" :disabled="!tracks[index]" @click="toggleSidePlayback(index)">
             <Pause v-if="playing[index]" :size="19"/><Play v-else :size="19"/>
