@@ -414,12 +414,13 @@ function fit() {
   overhead.bottom = -units
   overhead.updateProjectionMatrix()
   const zoom = Math.max(1, height / width * 1.28)
+  const cameraScale = props.camera === 'close' && !followedBlob.value ? .7 : 1
   if (props.tabletop) {
     const compact = width < 400 && height < 330
-    originalPosition.set(-300,520,720).multiplyScalar(compact ? zoom * 1.12 : zoom)
+    originalPosition.set(-300,520,720).multiplyScalar((compact ? zoom * 1.12 : zoom) * cameraScale)
     originalTarget.set(0, compact ? 34 : width < 700 ? 60 : 20, 0)
   } else {
-    originalPosition.set(600,300,600).multiplyScalar(zoom)
+    originalPosition.set(600,300,600).multiplyScalar(zoom * cameraScale)
     originalTarget.set(0, width < 700 ? 18 : height < 500 ? 13 : 26, 0)
   }
   if (!manual && !followed) {
@@ -589,6 +590,7 @@ function setupRenderer() {
 }
 watch(() => props.species, list => { for (const s of list ?? []) colors.set(s.id,s.color); dirty = true }, { immediate:true })
 watch(() => [props.layers,props.camera,props.follow,props.selected,props.dim,props.scope,props.speedRange], () => { dirty = true }, { deep:true })
+watch(() => props.camera, () => { manual = false; fit() })
 watch(() => props.quality, () => { if (canvas) fit() })
 onMounted(setupRenderer)
 onBeforeUnmount(() => {

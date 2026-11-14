@@ -16,9 +16,16 @@ const spread=ref('sd'), cohort=ref('dawn'), hidden=ref([]), order=ref('classic')
 const separate=ref(false), otherPopulation=ref(false), compareSpecies=ref(false), causes=ref(false), transition=ref(false)
 const ageDemoVisible=ref(false), ageDemoPhase=ref('long'), ageDemoRuns=ref({}), ageDemoProgress=ref(null), ageDemoError=ref(''), ageDemoRetryPhase=ref('long')
 const ageDemoRestore=ref(null)
+const ageWalkthrough=ref(null)
 let ageDemoController
 const ageDemoPair=computed(()=>ageDemoVisible.value ? ageDemoRuns.value[ageDemoPhase.value] ?? null : null)
 const activeRun=computed(()=>ageDemoPair.value?.[0] ?? lab.run)
+const trendSubhead=computed(()=>{
+  if (!ageDemoVisible.value) return `${lab.run.setup.name} · Seed ${lab.run.setup.seed} · Through Day ${lab.run.summaries.length}${lab.batch?' · Simulating':''}`
+  if (ageDemoPair.value) return `Age walkthrough · ${activeRun.value.setup.name} · Seed ${activeRun.value.setup.seed} · Through Day ${activeRun.value.summaries.length}`
+  if (ageDemoProgress.value) return `Age walkthrough · Preparing ${ageDemoProgress.value.days}-day reference runs`
+  return ageDemoError.value ? 'Age walkthrough · Reference preparation failed' : 'Age walkthrough · Reference runs'
+})
 const scopeName=computed(()=>activeRun.value.setup.species.find(s=>s.id===lab.scope)?.name ?? 'All species')
 const species=computed(()=>activeRun.value.setup.species.filter(s=>s.enabled))
 const dawnRows=computed(()=>openingTrends(activeRun.value))
@@ -158,15 +165,26 @@ function jump(event) {
 }
 function focus(key) { focused.value=focused.value===key?null:key }
 function customRange(a,b) { from.value=a; to.value=b; range.value='custom' }
+function centerAgePanel() {
+  nextTick(()=>ageWalkthrough.value?.scrollIntoView({
+    behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',
+    block:'center'
+  }))
+}
 function centerAgeChart() {
-  nextTick(()=>document.getElementById('chart-age')?.scrollIntoView({
+  nextTick(()=>document.querySelector('.walkthrough-plots .spotlight-plot')?.scrollIntoView({
     behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',
     block:'center'
   }))
 }
 async function prepareAgePhase(phase) {
   if(ageDemoProgress.value) return
-  if(ageDemoRuns.value[phase]?.length===2) { ageDemoPhase.value=phase; range.value='all'; return }
+  if(ageDemoRuns.value[phase]?.length===2) {
+    ageDemoPhase.value=phase
+    range.value='all'
+    centerAgeChart()
+    return
+  }
   const controller=new AbortController()
   ageDemoController=controller
   ageDemoError.value=''
@@ -177,6 +195,7 @@ async function prepareAgePhase(phase) {
   ageDemoProgress.value={phase,day:0,days,completed:0}
   try {
     const pair=await Promise.all(setups.map(async(setup,side)=>prepareExperiment(setup,controller.signal,day=>{
+      if(ageDemoController!==controller || controller.signal.aborted || !ageDemoVisible.value) return
       progress[side]=day
       ageDemoProgress.value={phase,day,days,completed:progress[0]+progress[1]}
     })))
@@ -187,6 +206,7 @@ async function prepareAgePhase(phase) {
       range.value='all'
       from.value=1
       to.value=days
+      centerAgeChart()
     }
   } catch(error) {
     if(!controller.signal.aborted) {
@@ -194,8 +214,10 @@ async function prepareAgePhase(phase) {
       controller.abort()
     }
   } finally {
-    if(ageDemoController===controller) ageDemoController=null
-    ageDemoProgress.value=null
+    if(ageDemoController===controller) {
+      ageDemoController=null
+      ageDemoProgress.value=null
+    }
   }
 }
 function startAgeDemo() {
@@ -204,7 +226,7 @@ function startAgeDemo() {
     spread:spread.value,hidden:hidden.value,order:order.value,pin:pin.value}
   ageDemoVisible.value=true
   focused.value='age'
-  centerAgeChart()
+  centerAgePanel()
   cohort.value='dusk'
   spread.value='sd'
   hidden.value=hidden.value.filter(key=>!basic.includes(key))
@@ -216,7 +238,9 @@ function startAgeDemo() {
   void prepareAgePhase('long')
 }
 function closeAgeDemo() {
-  ageDemoController?.abort()
+  const controller=ageDemoController
+  ageDemoController=null
+  controller?.abort()
   ageDemoVisible.value=false
   ageDemoProgress.value=null
   ageDemoError.value=''
@@ -237,7 +261,15 @@ function closeAgeDemo() {
 function changeAgePhase(phase) {
   if(ageDemoProgress.value) return
   void prepareAgePhase(phase)
-  centerAgeChart()
+  centerAgePanel()
+}
+function cancelAgePreparation() {
+  const controller=ageDemoController
+  if(!controller) return
+  ageDemoController=null
+  controller.abort()
+  ageDemoProgress.value=null
+  ageDemoError.value='Preparation canceled.'
 }
 const ageReadings=computed(()=>['long','short'].map(phase=>{
   const run=ageDemoRuns.value[phase]?.[0]
@@ -286,7 +318,7 @@ onBeforeUnmount(()=>ageDemoController?.abort())
       <label>To day <input v-model.number="to" type="number" :min="from" :max="activeRun.summaries.length || 1"></label><button class="link" @click="range='all'">Reset range</button>
     </div>
     <div class="trend-subhead">
-      <span>{{ ageDemoVisible && ageDemoPair ? 'Age walkthrough · '+activeRun.setup.name : lab.run.setup.name }} · Seed {{ activeRun.setup.seed }} · Through Day {{ activeRun.summaries.length }}<span v-if="lab.batch"> · Simulating</span></span>
+      <span>{{ trendSubhead }}</span>
       <div class="trend-tabs"><button v-for="name in ['Trends','Trait Space']" :key="name" class="secondary" :aria-pressed="tab===name" :disabled="ageDemoVisible && name==='Trait Space'" @click="tab=name">{{ name }}</button></div>
     </div>
     <TraitSpace v-if="tab==='Trait Space'" :scope="lab.scope" @watch="(day,id,options)=>emit('watch',day,id,options)"/>
@@ -308,7 +340,7 @@ onBeforeUnmount(()=>ageDemoController?.abort())
           <p>Dawn counts every blob that starts the day. Dusk counts survivors and newborns. The shaded band shows one sample standard deviation on either side of the mean, within the faint min and max lines.</p>
         </details>
       </div>
-      <section v-if="ageDemoVisible" class="age-walkthrough" aria-label="Age walkthrough" aria-live="polite">
+      <section v-if="ageDemoVisible" ref="ageWalkthrough" class="age-walkthrough" aria-label="Age walkthrough" aria-live="polite">
         <header>
           <div><span class="age-step">{{ ageDemoPhase==='long'?'LONG RUN':'SHORT RUN' }} · SEED {{ SIZE_MUTATION_SEED }}</span>
             <h2>Compare age across two run lengths</h2>
@@ -321,7 +353,7 @@ onBeforeUnmount(()=>ageDemoController?.abort())
           <button class="secondary" :aria-pressed="ageDemoPhase==='short'" :disabled="!!ageDemoProgress" @click="changeAgePhase('short')">
             {{ ageDemoRuns.short?'Short run · 100 days':'Prepare short run · 100 days' }}
           </button>
-          <button v-if="ageDemoProgress" class="secondary" @click="ageDemoController?.abort()">Cancel preparation</button>
+          <button v-if="ageDemoProgress" class="secondary" @click="cancelAgePreparation">Cancel preparation</button>
           <span v-if="ageDemoProgress" class="quiet" role="status">Preparing both {{ ageDemoProgress.phase==='long'?'600':'100' }}-day runs · {{ ageDemoProgress.completed }} / {{ ageDemoProgress.days*2 }} generations</span>
           <span v-else-if="ageDemoError" class="age-demo-error" role="alert">{{ ageDemoError }} <button class="link" @click="prepareAgePhase(ageDemoRetryPhase)">Retry</button></span>
         </div>
@@ -336,12 +368,12 @@ onBeforeUnmount(()=>ageDemoController?.abort())
         </div>
         <p class="age-demo-note">This temporary reference does not replace or save over your run. Age is measured at {{ cohortLabel.toLowerCase() }}; the results describe this seed and setup.</p>
       </section>
-      <p v-if="annotations.length" class="trend-annotations quiet">
+      <p v-if="annotations.length && !ageDemoVisible" class="trend-annotations quiet">
         <span v-for="a in annotations" :key="a.day+a.label" :style="{color:a.color}">┊ Day {{ a.day }} · {{ a.label }}</span>
       </p>
-      <div v-if="hidden.length" class="restore-plots"><button v-for="key in hidden" :key="key" class="secondary" @click="toggleHidden(key)">+ {{ options[key].title }}</button>
+      <div v-if="hidden.length && !ageDemoVisible" class="restore-plots"><button v-for="key in hidden" :key="key" class="secondary" @click="toggleHidden(key)">+ {{ options[key].title }}</button>
         <button class="link" @click="hidden=[]">Restore all</button></div>
-      <div v-if="!rows.length" class="notice" role="status">{{ lab.completed?'Choose a different range.':'Complete Day 1 to see trends.' }}
+      <div v-if="!ageDemoVisible && !rows.length" class="notice" role="status">{{ lab.completed?'Choose a different range.':'Complete Day 1 to see trends.' }}
         <button v-if="!lab.completed" class="secondary" @click="emit('watch',1)">Watch World</button></div>
       <div v-if="pinned && !ageDemoVisible" class="pinned-summary">
         <div><strong>Day {{ pin }} · Pinned</strong><small>{{ scopeName }} · {{ pinned.population }} blobs at {{ cohort }} · {{ pinned.births }} births · {{ pinned.deaths }} deaths</small></div>
@@ -368,7 +400,7 @@ onBeforeUnmount(()=>ageDemoController?.abort())
           </div>
         </template>
       </details>
-      <template v-for="section in sectionOrder" :key="section">
+      <template v-if="!ageDemoVisible || ageDemoPair" v-for="section in sectionOrder" :key="section">
         <div v-if="section==='compact'" class="compact-plots walkthrough-plots" :class="{'spotlight-layout':focused==='age'}">
           <TrendPlot v-for="key in basic.filter(key=>!hidden.includes(key))" :key="key" v-bind="options[key]"
             compact :spotlight="focused==='age' && focused===key" :rows="rows" :pin="pin" :scope="scopeName" :annotations="annotations"

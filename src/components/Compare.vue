@@ -139,11 +139,11 @@ function seekDay(value,index=null) {
   if (index==null) {
     if (value>horizon.value) return
     days.value=[value,value]
+    day.value=value
   } else {
     if (value>runDays.value[index]) return
     days.value[index]=value
   }
-  day.value=value
 }
 function changeDay(event) {
   seekDay(event.target.valueAsNumber)
@@ -286,7 +286,7 @@ watch([leftId,rightId,()=>days.value[0],()=>days.value[1],day,()=>cameras.value[
   left:leftId.value,right:rightId.value,day:day.value,leftDay:days.value[0],rightDay:days.value[1],
   leftCamera:cameras.value[0],rightCamera:cameras.value[1],
 }),{immediate:true})
-watch(horizon,limit=>{ if (day.value>limit) day.value=Math.max(1,limit) })
+watch(horizon,limit=>{ if (day.value>limit) day.value=Math.max(1,limit) },{immediate:true})
 onBeforeUnmount(()=>{
   jobs=[jobs[0]+1,jobs[1]+1]
   stopVideoSequence()

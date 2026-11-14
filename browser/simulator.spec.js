@@ -2114,6 +2114,151 @@ test('Compare hides stale boards while changing days and can retry the same day'
   await expect(page.getByRole('region', { name: 'Right run' }).getByRole('heading')).toHaveText(/Right archive.*5\.0 s/)
 })
 
+test('Compare keeps the shared day valid and Close view changes the board framing', async ({ page }) => {
+  await page.setViewportSize({ width:1280, height:900 })
+  await page.emulateMedia({ reducedMotion:'reduce' })
+  await page.addInitScript(() => {
+    localStorage.setItem('evolution.tour','1')
+    const getContext=HTMLCanvasElement.prototype.getContext
+    HTMLCanvasElement.prototype.getContext=function(type,...args) {
+      return type==='webgl2' ? null : getContext.call(this,type,...args)
+    }
+  })
+  await openSimulator(page)
+  for (const [name,day] of [['Long archive',5],['Short archive',2]]) {
+    await startRun(page,'10',async()=>{
+      await fixedDay(page,'1')
+      await page.getByRole('spinbutton',{name:'Food',exact:true}).fill('500')
+      await page.getByLabel('Run name').fill(name)
+    })
+    await quickThrough(page,day)
+    await expect(batchStatus(page,'Saved through')).toHaveText('Day '+day)
+    await page.getByRole('button',{name:'Close',exact:true}).click()
+  }
+
+  await openRunLibrary(page)
+  const library=page.getByRole('dialog',{name:'Run Library'})
+  await library.locator('article').filter({hasText:'Long archive'}).getByRole('button',{name:'Compare',exact:true}).click()
+  await expect(page.getByRole('heading',{name:'Compare runs',exact:true})).toBeVisible()
+
+  const shared=page.getByRole('spinbutton',{name:'Set both days'})
+  const leftDay=page.getByRole('spinbutton',{name:'Left day',exact:true})
+  const rightDay=page.getByRole('spinbutton',{name:'Right day',exact:true})
+  await expect(shared).toHaveAttribute('max','2')
+  await expect(shared).toHaveValue('2')
+  await page.getByRole('button',{name:'Previous comparison day'}).click()
+  await expect(shared).toHaveValue('1')
+  await page.getByRole('button',{name:'Next comparison day'}).click()
+  await expect(shared).toHaveValue('2')
+  await expect(leftDay).toHaveValue('2')
+  await expect(rightDay).toHaveValue('2')
+  await rightDay.fill('5')
+  await rightDay.press('Tab')
+  await expect(rightDay).toHaveValue('5')
+  await expect(shared).toHaveValue('2')
+  await page.reload()
+  await expect(shared).toHaveValue('2')
+  await expect(leftDay).toHaveValue('2')
+  await expect(rightDay).toHaveValue('5')
+  await page.getByRole('button',{name:'Previous comparison day'}).click()
+  await expect(shared).toHaveValue('1')
+  await expect(leftDay).toHaveValue('1')
+  await expect(rightDay).toHaveValue('1')
+
+  const camera=page.getByRole('combobox',{name:'Left camera angle'})
+  const canvas=page.getByRole('region',{name:'Left run'}).locator('canvas.world-canvas')
+  const pixels=()=>canvas.evaluate(element=>element.toDataURL())
+  await page.waitForTimeout(100)
+  const field=await pixels()
+  await camera.selectOption('close')
+  await expect.poll(pixels).not.toBe(field)
+  await page.getByRole('button',{name:'Fit both boards'}).click()
+  await expect(camera).toHaveValue('board')
+  await expect.poll(pixels).toBe(field)
+})
+
+test('Age walkthrough keeps controls visible through failures, cancellation, and run changes', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.setViewportSize({width:850,height:650})
+  await page.emulateMedia({reducedMotion:'reduce'})
+  await page.addInitScript(() => {
+    localStorage.setItem('evolution.tour','1')
+    const NativeWorker=window.Worker
+    window.ageDemoTest={mode:'fail',workers:[]}
+    window.Worker=class extends NativeWorker {
+      postMessage(data) {
+        if(data.type==='init' && data.config.name.startsWith('Size mutation ·')) {
+          if(window.ageDemoTest.mode==='fail') {
+            window.ageDemoTest.mode='hold'
+            queueMicrotask(()=>this.onmessage?.({data:{type:'error',message:'Forced age preparation failure'}}))
+            return
+          }
+          if(window.ageDemoTest.mode==='hold') {
+            window.ageDemoTest.workers.push(this)
+            return
+          }
+        }
+        return super.postMessage(data)
+      }
+    }
+  })
+  await openSimulator(page)
+  await page.getByRole('link',{name:'Trends',exact:true}).click()
+  await page.getByRole('button',{name:'Walk through age',exact:true}).click()
+
+  const walkthrough=page.getByRole('region',{name:'Age walkthrough'})
+  const alert=walkthrough.getByRole('alert')
+  const cancel=walkthrough.getByRole('button',{name:'Cancel preparation'})
+  const chartGrid=page.locator('.walkthrough-plots')
+  await expect(alert).toContainText('Forced age preparation failure')
+  await expect(page.getByText(/Age walkthrough · Reference preparation failed/)).toBeVisible()
+  await expect(chartGrid).toHaveCount(0)
+  await expect.poll(async()=>{
+    const bounds=await walkthrough.boundingBox()
+    return bounds && bounds.y>=0 && bounds.y+bounds.height<=650
+  }).toBe(true)
+
+  await walkthrough.getByRole('button',{name:'Retry'}).click()
+  await expect(page.getByRole('progressbar',{name:'Age walkthrough preparation'})).toBeVisible()
+  await expect(cancel).toBeVisible()
+  await expect.poll(async()=>{
+    const bounds=await cancel.boundingBox()
+    return bounds && bounds.y>=0 && bounds.y+bounds.height<=650
+  }).toBe(true)
+  await cancel.click()
+  await expect(alert).toContainText('Preparation canceled.')
+  await expect(walkthrough.getByRole('button',{name:'Retry'})).toBeVisible()
+
+  await page.evaluate(()=>{window.ageDemoTest.mode='run'})
+  await walkthrough.getByRole('button',{name:'Retry'}).click()
+  await expect(page.locator('.walkthrough-plots .spotlight-plot')).toBeVisible({timeout:60_000})
+  await expect(page.getByText(/Age walkthrough · Size mutation · Wide.*Through Day 600/)).toBeVisible()
+  const agePlot=page.locator('.walkthrough-plots .spotlight-plot')
+  await expect.poll(async()=>{
+    const bounds=await agePlot.boundingBox()
+    return bounds && bounds.y>=0 && bounds.y+bounds.height<=650
+  }).toBe(true)
+
+  await page.evaluate(()=>{window.ageDemoTest.mode='hold'})
+  await walkthrough.getByRole('button',{name:'Prepare short run · 100 days'}).click()
+  await expect(page.getByRole('status').filter({hasText:'Preparing both 100-day runs'})).toBeVisible()
+  await expect(walkthrough.getByText('LONG RUN · SEED 118')).toBeVisible()
+  await expect(page.getByText(/Age walkthrough · Size mutation · Wide.*Through Day 600/)).toBeVisible()
+  await expect(agePlot).toBeVisible()
+  await cancel.click()
+  await expect(alert).toContainText('Preparation canceled.')
+  await expect(agePlot).toBeVisible()
+
+  await page.evaluate(()=>{window.ageDemoTest.mode='run'})
+  await walkthrough.getByRole('button',{name:'Retry'}).click()
+  await expect(page.locator('.walkthrough-plots .spotlight-plot')).toBeVisible({timeout:60_000})
+  await expect(walkthrough.getByText('SHORT RUN · SEED 118')).toBeVisible()
+  await expect(page.getByText(/Age walkthrough · Size mutation · Wide.*Through Day 100/)).toBeVisible()
+  await walkthrough.getByRole('button',{name:'Close age walkthrough'}).click()
+  await expect(page.getByRole('button',{name:'Walk through age',exact:true})).toBeVisible()
+  await expect(page.getByText(/Starter field · Seed .* Through Day/)).toBeVisible()
+})
+
 for (const failure of ['constructor', 'timeout']) {
   test(`retry recovers after a worker startup ${failure} failure`, async ({ page }) => {
     await page.addInitScript(failure => {

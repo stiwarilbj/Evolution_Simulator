@@ -77,3 +77,10 @@
 - Moved a focused Trends chart into the plot grid and added an inline Age walkthrough that compares temporary seed 118 runs at 600 and 100 days without changing the active run.
 - Centered the Age chart in the viewport when the walkthrough opens or switches between the long and short run, while honoring reduced-motion preferences.
 - Listed ten low-scope visual and interaction refinements inspired by the reference video; no new app feature was selected for implementation.
+
+## 2026-11-14
+
+- Fixed Compare so changing one board’s day does not push the shared day beyond its valid range. Kept independent days in the URL and reload state.
+- Made Close view zoom in on the board before a creature is selected, and made Fit both boards restore the field camera.
+- Kept the Age walkthrough’s preparation controls on screen, hid live-run charts until its reference is ready, and protected retry and cancel state from late worker results.
+- Added browser checks for the Compare day and camera controls and for Age walkthrough failure, retry, cancel, and run changes.
