@@ -42,6 +42,6 @@ export function trackFrame(track, time) {
     return { ...blob, x:blend('x'), y:blend('y'), angle, energy:Math.max(0,blend('energy')),
       credits, preyCredits, state, alive: state !== 6, home: state === 5 }
   })
-  return { day: track.day, time, duration: track.duration, stepSeconds, blobs,
+  return { day: track.day, time, duration: track.duration, stepSeconds, refugeWidth: track.final.refugeWidth, blobs,
     plants: track.plants.filter(p => (eaten.get(p.id) ?? Infinity) > time), events: track.events }
 }

@@ -88,3 +88,4 @@
 - Made Compare pick runs with results when two are available and keep both playback percentages on one line.
 - Kept guided replay boards visible in short windows and moved the energy notes below playback controls on narrow screens. Added browser checks for these fixes.
 - Fixed clipped Run Library buttons. Actions now open below their run and wrap to fit the dialog. Added browser checks for keyboard use, renaming, and setup downloads.
+- Added a light-gray home border on all four sides. Blobs spread out around it each day, gather food from the white field, and must get home before the round ends. The overhead board fits below the controls in split windows. Older runs and the video examples keep their original rules.

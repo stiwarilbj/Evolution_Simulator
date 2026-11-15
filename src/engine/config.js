@@ -2,11 +2,14 @@ export const TRAITS = ['speed', 'size', 'sense']
 export const PALETTE = ['#406780', '#F47E18', '#CE6591', '#80A653', '#9B7ACA', '#46A49D', '#D5A84C', '#C76052']
 export const LEGACY_RULE_VERSION = 1
 export const SETTLED_RULE_VERSION = 3
-export const VERSION = 4
+export const WALKTHROUGH_RULE_VERSION = 4
+export const REFUGE_RULE_VERSION = 5
+export const VERSION = REFUGE_RULE_VERSION
 export const MAX_SEED = 0xffffffff
 export const endsWhenSettled = config => config.version >= SETTLED_RULE_VERSION && config.endMode === 'settled'
-export const usesStandardDeviation = config => config.version >= 4
+export const usesStandardDeviation = config => config.version >= WALKTHROUGH_RULE_VERSION
 export const usesWalkthroughForaging = config => usesStandardDeviation(config) && config.foraging === 'walkthrough'
+export const usesRefugeBorder = config => config.version >= REFUGE_RULE_VERSION
 
 export function speciesTemplate(id, name, color, count = 10, enabled = true, version = VERSION) {
   const spread = usesStandardDeviation({ version })
@@ -17,14 +20,14 @@ export function speciesTemplate(id, name, color, count = 10, enabled = true, ver
     mutation: { speed: true, size: true, sense: true } }
 }
 
-export function starter() {
+export function starter(version = VERSION) {
   return {
-    version: VERSION, name: 'Starter field', days: 50, endMode: 'settled', duration: 100, seed: 18, food: 50,
+    version, name: 'Starter field', days: 50, endMode: 'settled', duration: 100, seed: 18, food: 50,
     mode: 'prepare', predation: true, sameSpecies: true, stride: 'linked', metabolism: 'walkthrough',
     plantReward: 0, preyReward: 0, schedule: [], scheduleMode: 'constant',
-    species: [speciesTemplate('blue', 'Blue', PALETTE[0], 50),
-      { ...speciesTemplate('orange', 'Orange', PALETTE[1], 10, false), sense: 50 },
-      { ...speciesTemplate('pink', 'Pink', PALETTE[2], 10, false), speed: 9, size: 9 }]
+    species: [speciesTemplate('blue', 'Blue', PALETTE[0], 50, true, version),
+      { ...speciesTemplate('orange', 'Orange', PALETTE[1], 10, false, version), sense: 50 },
+      { ...speciesTemplate('pink', 'Pink', PALETTE[2], 10, false, version), speed: 9, size: 9 }]
   }
 }
 
@@ -35,7 +38,7 @@ export function validate(config) {
       errors[key] = `${name} must be ${integer ? 'a whole number ' : ''}from ${min} to ${max}.`
     }
   }
-  if (!config || ![LEGACY_RULE_VERSION, 2, SETTLED_RULE_VERSION, VERSION].includes(config.version)) {
+  if (!config || ![LEGACY_RULE_VERSION, 2, SETTLED_RULE_VERSION, WALKTHROUGH_RULE_VERSION, VERSION].includes(config.version)) {
     return { setup: 'Choose a setup file with a supported rule version.' }
   }
   if (typeof config.name !== 'string' || !config.name.trim() || config.name.trim().length > 60) errors.name = 'Enter a run name with 1–60 characters.'
@@ -138,6 +141,7 @@ export function randomSeed(exclude = 0) {
 }
 
 export function setupForNewRun(setup) {
+  if (setup.version === WALKTHROUGH_RULE_VERSION) return { ...setup, version: VERSION }
   if (setup.version !== SETTLED_RULE_VERSION) return setup
   const species = setup.species.map(({ variance, ...item }) => ({
     ...item, standardDeviation: Object.fromEntries(TRAITS.map(trait => [trait, Math.sqrt(variance[trait])])),

@@ -1,4 +1,4 @@
-import { canHunt, clamp, contact, edgePoint, FIELD, Grid } from './geometry.js'
+import { canHunt, clamp, contact, edgePoint, FIELD, Grid, refugeContact, refugeDistance } from './geometry.js'
 import { random } from './random.js'
 
 const active = blob => blob.alive && !blob.home
@@ -38,7 +38,7 @@ function orient(blob, nearby, plants, ctx, config) {
   const stepsLeft = Math.min(blob.energy / (blob.rate * ctx.stepSeconds), (ctx.limit ?? Infinity) - ctx.tick)
   const reserve = stepsLeft - Math.sqrt(distance(blob, blob.target)) / (blob.speedWorld * ctx.stepSeconds)
   const wantsHome = blob.credits >= 2 || (blob.credits === 1 && reserve <= 10)
-  if (wantsHome && canReach(blob, blob.target)) return { state: 5 }
+  if (wantsHome && (ctx.refugeWidth ? refugeDistance(blob, ctx.refugeWidth) === 0 : canReach(blob, blob.target))) return { state: 5 }
   if (threat) return { state: 3, angle: towards(threat, blob) + jitter(9, threat.id) }
   if (wantsHome && (blob.credits >= 2 || reserve <= 5)) return { state: 4, angle: towards(blob, blob.target) }
   if (prey && (!food || distance(blob, prey) <= distance(blob, food))) return { state: 2, angle: towards(blob, prey) }
@@ -46,11 +46,13 @@ function orient(blob, nearby, plants, ctx, config) {
   if (wantsHome) return { state: 4, angle: towards(blob, blob.target) }
   const angle = blob.angle + jitter(8)
   const x = blob.x + Math.cos(angle), y = blob.y + Math.sin(angle)
-  return { state: 0, angle: x >= 0 && x <= FIELD && y >= 0 && y <= FIELD ? angle : towards(blob, { x: FIELD / 2, y: FIELD / 2 }) }
+  const edge = ctx.refugeWidth ? blob.r : 0
+  return { state: 0, angle: x >= edge && x <= FIELD - edge && y >= edge && y <= FIELD - edge
+    ? angle : towards(blob, { x: FIELD / 2, y: FIELD / 2 }) }
 }
 
-export function forage(ctx, config, record, kill, eat) {
-  const { stepSeconds: seconds } = ctx
+export function forage(ctx, config, settleHome, kill, eat) {
+  const { stepSeconds: seconds, refugeWidth = 0 } = ctx
   const start = ctx.tick * seconds, end = (ctx.tick + 1) * seconds
   const plants = new Grid(), nearby = new Grid(), moved = new Grid()
   let remaining = 0
@@ -59,9 +61,14 @@ export function forage(ctx, config, record, kill, eat) {
     plants.insert(plant)
     remaining++
   }
-  const blobs = ctx.blobs.filter(active)
+  const blobs = ctx.blobs.filter(blob => {
+    if (!active(blob)) return false
+    if (!refugeWidth || blob.energy > 0) return true
+    kill(ctx, blob, start, 'Energy depletion')
+    return false
+  })
   for (const blob of blobs) {
-    blob.target = edgePoint(blob.x, blob.y)
+    blob.target = edgePoint(blob.x, blob.y, refugeWidth)
     nearby.insert(blob)
   }
   // Choose directions from the same positions. Meals and hunts happen after everyone moves.
@@ -71,19 +78,20 @@ export function forage(ctx, config, record, kill, eat) {
     const stride = blob.speedWorld * seconds
     blob.state = state
     if (state === 5) {
-      blob.home = true
-      blob.velocityX = blob.velocityY = 0
-      record(ctx, blob, start, 'home')
+      settleHome(ctx, blob, start)
       continue
     }
     if (stride < Number.EPSILON) {
-      kill(ctx, blob, start, blob.credits ? 'Missed home' : 'Starvation')
+      if (refugeWidth && blob.credits && refugeDistance(blob, refugeWidth) === 0) settleHome(ctx, blob, start)
+      else kill(ctx, blob, start, blob.credits ? 'Missed home' : 'Starvation')
       continue
     }
-    const x = clamp(blob.x + stride * Math.cos(angle), 0, FIELD)
-    const y = clamp(blob.y + stride * Math.sin(angle), 0, FIELD)
+    const edge = refugeWidth ? blob.r : 0
+    const x = clamp(blob.x + stride * Math.cos(angle), edge, FIELD - edge)
+    const y = clamp(blob.y + stride * Math.sin(angle), edge, FIELD - edge)
     const dx = x - blob.x, dy = y - blob.y
     blob.lastMove = { x: blob.x, y: blob.y, dx, dy }
+    const arrival = refugeWidth && state === 4 ? refugeContact(blob.lastMove, refugeWidth) : Infinity
     blob.angle = dx || dy ? Math.atan2(dy, dx) : angle
     blob.x = x
     blob.y = y
@@ -91,7 +99,11 @@ export function forage(ctx, config, record, kill, eat) {
     blob.velocityY = dy / seconds
     blob.energy = Math.max(0, blob.energy - (blob.moveCost ?? blob.rate * seconds))
     if (blob.energy === 0) kill(ctx, blob, end, 'Energy depletion')
-    else moved.insert(blob)
+    else if (arrival <= 1) {
+      blob.x = blob.lastMove.x + dx * arrival
+      blob.y = blob.lastMove.y + dy * arrival
+      settleHome(ctx, blob, start + seconds * arrival)
+    } else moved.insert(blob)
   }
   if (config.predation) {
     for (const hunter of blobs) {

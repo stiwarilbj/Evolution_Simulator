@@ -1,11 +1,11 @@
-import { starter } from './engine/config.js'
+import { starter, WALKTHROUGH_RULE_VERSION } from './engine/config.js'
 import { founders } from './engine/simulation.js'
 
 export const SIGHT_EXAMPLE_DAYS = 1000
 export const SIGHT_EXAMPLE_LATER_DAY = 648
 
 export function guideSource(name) {
-  const setup = starter()
+  const setup = starter(WALKTHROUGH_RULE_VERSION)
   if (name === 'hunt') {
     Object.assign(setup, { seed:3, foraging:'walkthrough' })
     Object.assign(setup.species[0], { sense:28 })

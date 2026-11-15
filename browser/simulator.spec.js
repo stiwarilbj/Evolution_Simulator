@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
-import { LEGACY_RULE_VERSION, starter } from '../src/engine/config.js'
+import { LEGACY_RULE_VERSION, starter, WALKTHROUGH_RULE_VERSION } from '../src/engine/config.js'
 import { guideSource } from '../src/guide-replay.js'
 
 async function openSimulator(page) {
@@ -43,6 +43,32 @@ function dayTile(page, day) {
 async function openRunLibrary(page) {
   await page.getByRole('button', { name: 'Run options' }).click()
   await page.getByRole('button', { name: 'Run Library' }).click()
+}
+
+async function fieldColors(page, canvas) {
+  const screenshot = await canvas.screenshot({ scale:'css' })
+  return page.evaluate(async encoded => {
+    const image = new Image()
+    image.src = 'data:image/png;base64,' + encoded
+    await image.decode()
+    const sample = document.createElement('canvas')
+    sample.width = image.width
+    sample.height = image.height
+    const ctx = sample.getContext('2d')
+    ctx.drawImage(image, 0, 0)
+    // World overhead keeps 600 field units in the shorter canvas dimension.
+    const scale = Math.min(image.width, image.height) / 600
+    const tone = (x, y) => {
+      const pixels = ctx.getImageData(
+        Math.round(image.width / 2 + x * scale) - 2, Math.round(image.height / 2 + y * scale) - 2, 5, 5).data
+      return Array.from({ length:25 }, (_, i) => pixels[4 * i]).sort((a,b) => a - b)[12]
+    }
+    return {
+      sides: [[-225,0],[0,-225],[225,0],[0,225]].map(([x,y]) => tone(x,y)),
+      corners: [[-225,-225],[225,-225],[225,225],[-225,225]].map(([x,y]) => tone(x,y)),
+      interior: tone(0,0),
+    }
+  }, screenshot.toString('base64'))
 }
 
 async function installSaveDelay(page) {
@@ -165,12 +191,76 @@ test('the production build runs a new experiment and shows its charts @pages', a
   expect(problems).toEqual([])
 })
 
+test('the four gray home sides and corners stay visible during replay and in Canvas @pages', async ({ page }) => {
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+  await openSimulator(page)
+  await expect(page).toHaveTitle('Evolution Simulator')
+  await startRun(page)
+  const field = page.getByRole('region', { name:'Simulation field' })
+  const canvas = field.locator('canvas.world-canvas')
+  const overhead = async () => {
+    await page.getByRole('button', { name:'View options' }).click()
+    await page.getByRole('button', { name:/^Overhead/ }).click()
+  }
+  const painted = { sides:[229,229,229,229], corners:[229,229,229,229], interior:255 }
+  await overhead()
+  await expect(field.getByText('Canvas view', { exact:true })).toHaveCount(0)
+  await expect.poll(() => fieldColors(page, canvas)).toEqual(painted)
+
+  await quickThrough(page, 1)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
+  await page.getByRole('button', { name:'Watch last day' }).click()
+  const time = page.getByRole('slider', { name:'Replay time' })
+  await expect(time).toBeVisible()
+  await time.fill('0')
+  await expect.poll(() => fieldColors(page, canvas)).toEqual(painted)
+  await page.getByRole('button', { name:'Layers', exact:true }).click()
+  await page.getByRole('button', { name:'More layer options' }).click()
+  await page.getByRole('checkbox', { name:'Show refuges' }).check()
+  await page.getByRole('button', { name:'Back to layers' }).click()
+  await page.getByRole('button', { name:'Close layers' }).click()
+
+  await page.setViewportSize({ width:680, height:600 })
+  const settings = await page.getByRole('button', { name:'Simulation Settings' }).boundingBox()
+  expect((await canvas.boundingBox()).y).toBeGreaterThan(settings.y + settings.height)
+  const lost = await canvas.evaluate(element => {
+    const extension = element.getContext('webgl2')?.getExtension('WEBGL_lose_context')
+    extension?.loseContext()
+    return !!extension
+  })
+  expect(lost).toBe(true)
+  await expect(field.getByText('Canvas view', { exact:true })).toBeVisible()
+  await expect.poll(() => fieldColors(page, canvas)).toEqual(painted)
+  await page.getByRole('button', { name:'Next day' }).click()
+  await expect(page.getByRole('button', { name:'Run options' })).toHaveText('Day 2 / 10 · Ready')
+  await expect.poll(() => fieldColors(page, canvas)).toEqual(painted)
+
+  await openRunLibrary(page)
+  const legacy = { ...starter(WALKTHROUGH_RULE_VERSION), mode:'live', days:10 }
+  await page.getByRole('dialog', { name:'Run Library' }).locator('input[type=file]').setInputFiles({
+    name:'old-rules.json', mimeType:'application/json', buffer:Buffer.from(JSON.stringify(legacy)),
+  })
+  await page.getByRole('button', { name:'Evolve!' }).click()
+  await expect(page.getByRole('button', { name:'Run options' })).toHaveText('Day 1 / 10 · Ready')
+  await quickThrough(page, 1)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
+  await page.getByRole('button', { name:'Watch last day' }).click()
+  await expect(time).toBeVisible()
+  await time.fill('0')
+  if (!(await page.locator('.world').getAttribute('class')).includes('is-overhead')) await overhead()
+  await expect.poll(() => fieldColors(page, canvas)).toEqual({
+    sides:[255,255,255,255], corners:[255,255,255,255], interior:255,
+  })
+  expect(errors).toEqual([])
+})
+
 test('live generations end when settled and Quick Sim stops at the extinction tile @pages', async ({ page }) => {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await openSimulator(page)
   await startRun(page, '10', async () => {
-    await page.getByRole('spinbutton', { name: 'Random seed' }).fill('3')
+    await page.getByRole('spinbutton', { name: 'Random seed' }).fill('6')
     await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('10')
   })
   await expect(page.getByText('0.00 s elapsed')).toBeVisible()
@@ -201,10 +291,10 @@ test('live generations end when settled and Quick Sim stops at the extinction ti
   await dayTile(page, 3).click()
   await tile.click()
   const time = page.getByRole('slider', { name: 'Replay time' })
-  await expect(time).toHaveValue('5.9')
+  await expect(time).toHaveValue('6.7')
   await page.reload()
   await expect(tile).toBeVisible()
-  await expect(time).toHaveValue('5.9')
+  await expect(time).toHaveValue('6.7')
   await page.getByRole('link', { name: 'Trends', exact: true }).click()
   await expect(page.getByText(/Browser test run .* Through Day 4/)).toBeVisible()
   expect(errors).toEqual([])
@@ -1000,7 +1090,7 @@ test('Trends compares sight spread in the filtered days and opens each closing c
 
   const world = page.locator('main.world')
   const clock = page.getByRole('slider', { name: 'Replay time' })
-  for (const [day, label, count, spread] of [[2, 'Narrowest', 188, '0.50'], [3, 'Widest', 274, '0.63']]) {
+  for (const [day, label, count, spread] of [[2, 'Narrowest', 157, '0.54'], [3, 'Widest', 233, '0.62']]) {
     const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name: label + ' spread · Day ' + day }) })
     await expect(card.getByText(String(count), { exact: true })).toBeVisible()
     await expect(card.getByText(spread, { exact: true })).toBeVisible()
@@ -1123,18 +1213,18 @@ test('Trait Space shows exact ages and newborn shares for both days and the sele
   const table = page.getByRole('table', { name: 'Living blobs by age' })
   await expect(table.getByRole('columnheader')).toHaveText(['Age (days)', 'Day 3', 'Day 2'])
   const cells = label => table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: label, exact: true }) }).getByRole('cell')
-  await expect(cells('0')).toHaveText(['124', '91'])
-  await expect(cells('3')).toHaveText(['37', '0'])
-  await expect(cells('Living blobs')).toHaveText(['274', '188'])
-  await expect(cells('Newborn share')).toHaveText(['45.3%', '48.4%'])
+  await expect(cells('0')).toHaveText(['110', '73'])
+  await expect(cells('3')).toHaveText(['32', '0'])
+  await expect(cells('Living blobs')).toHaveText(['233', '157'])
+  await expect(cells('Newborn share')).toHaveText(['47.2%', '46.5%'])
   await expect(page.getByRole('spinbutton', { name: 'Bins' })).toHaveCount(0)
   await page.getByRole('checkbox', { name: 'Percentage' }).check()
-  await expect(cells('0')).toHaveText(['45.3%', '48.4%'])
+  await expect(cells('0')).toHaveText(['47.2%', '46.5%'])
   await page.getByLabel('Filter By Species').selectOption('orange')
-  await expect(cells('Living blobs')).toHaveText(['77', '39'])
+  await expect(cells('Living blobs')).toHaveText(['78', '40'])
   await compare.fill('0')
   await compare.press('Tab')
-  await expect(cells('Living blobs')).toHaveText(['77'])
+  await expect(cells('Living blobs')).toHaveText(['78'])
 })
 
 test('Trait Space keeps selections within the species filter and only loads whole days', async ({ page }) => {
@@ -1681,17 +1771,17 @@ test('replay shows food credits without refills and refuge distance while return
   await expect(distance).toHaveCount(0)
 
   const credits = details.getByText('Food credits', { exact: true }).locator('xpath=following-sibling::dd[1]')
-  await time.fill('0.4')
+  await time.fill('0.6')
   await expect(credits).toHaveText('0')
-  await expect(details.getByText('460.0 / 500 energy')).toBeVisible()
-  await time.fill('0.5')
+  await expect(details.getByText('440.0 / 500 energy')).toBeVisible()
+  await time.fill('0.7')
   await expect(credits).toHaveText('1')
-  await expect(details.getByText('450.0 / 500 energy')).toBeVisible()
+  await expect(details.getByText('430.0 / 500 energy')).toBeVisible()
 
-  // In the starter setup, founder #1 heads home by 1 s and reaches the edge before 2 s.
-  await time.fill('1')
+  // Founder #1's center is at x=107.6 on the way to the left side of the gray border.
+  await time.fill('1.1')
   await expect(details.getByText('Returning', { exact: true })).toBeVisible()
-  await expect(distance).toBeVisible()
+  await expect(distance).toHaveText('57.6 units from the nearest refuge')
 
   await time.fill('2')
   await expect(details.getByText('Home', { exact: true })).toBeVisible()

@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { LEGACY_RULE_VERSION, MAX_SEED, SETTLED_RULE_VERSION, starter, plantsForDay, randomSeed,
+import { LEGACY_RULE_VERSION, MAX_SEED, SETTLED_RULE_VERSION, VERSION, WALKTHROUGH_RULE_VERSION, starter, plantsForDay, randomSeed,
   rulesFor, setupForNewRun, speciesTemplate, validate, validateRevisions } from '../src/engine/config.js'
-import { canHunt, cost, radius, walkthroughStepCost } from '../src/engine/geometry.js'
+import { canHunt, cost, FIELD, radius, REFUGE_WIDTH, refugeDistance, walkthroughStepCost } from '../src/engine/geometry.js'
 import { normal } from '../src/engine/random.js'
 import { dawn, dusk, founders, snapshot, step } from '../src/engine/simulation.js'
 import { distribution, openingTrends } from '../src/engine/stats.js'
@@ -54,6 +54,90 @@ test('dawn balances all four edges, resets credits and capacity, and keys food b
   assert.notDeepEqual(field.plants, dawn({ ...config, seed: 99 }, 1, opening).plants)
 })
 
+test('the painted border redistributes survivors and newborns, with food confined to the white field', () => {
+  for (const config of [starter(), { ...starter(), foraging:'walkthrough' }]) {
+    const initial = founders(config)
+    const first = dawn(config, 1, initial)
+    const { checkpoint } = step(first, config, Infinity, true)
+    assert.ok(checkpoint.roster.some(b => b.parent != null))
+    assert.ok(checkpoint.roster.some(b => b.parent == null))
+    const next = dawn(config, 2, checkpoint)
+    for (const field of [dawn(config, 1, initial), next]) {
+      assert.equal(snapshot(field).refugeWidth, REFUGE_WIDTH)
+      const counts = [0, 0, 0, 0]
+      for (const blob of field.blobs) {
+        const edges = [blob.x, FIELD - blob.x, blob.y, FIELD - blob.y]
+        const sides = edges.map((distance, side) => distance <= REFUGE_WIDTH ? side : -1).filter(side => side !== -1)
+        assert.equal(sides.length, 1)
+        const [side] = sides
+        counts[side]++
+        const facing = [Math.cos(blob.angle), -Math.cos(blob.angle), Math.sin(blob.angle), -Math.sin(blob.angle)]
+        assert.ok(facing[side] > .9)
+        assert.equal(blob.credits, 0)
+        assert.equal(blob.energy, blob.capacity)
+      }
+      assert.ok(Math.max(...counts) - Math.min(...counts) <= 1)
+      assert.ok(Math.min(...counts) > 0)
+      assert.ok(field.plants.every(plant => refugeDistance(plant, REFUGE_WIDTH) >= 2))
+    }
+    assert.deepEqual(next.blobs, dawn(config, 2, checkpoint).blobs)
+    const giants = { ...checkpoint, roster:checkpoint.roster.slice(0, 3).map(b => ({ ...b, size:1e30 })) }
+    const small = dawn(config, 3, giants)
+    const giantSides = small.blobs.map(b => [b.x, FIELD - b.x, b.y, FIELD - b.y].findIndex(d => d <= REFUGE_WIDTH))
+    assert.equal(new Set(giantSides).size, 3)
+    assert.ok(small.blobs.every(b => refugeDistance(b, REFUGE_WIDTH) === 0 && b.r <= REFUGE_WIDTH))
+    const giant = small.blobs[0]
+    Object.assign(giant, { x:60, y:250, credits:2, angle:Math.PI, speedWorld:200, moveCost:1 })
+    small.blobs = [giant]
+    step(small, config)
+    assert.equal(giant.home, true)
+    assert.equal(giant.x, 50)
+  }
+})
+
+test('a returning blob settles at the first contact on another side, even on the final tick', () => {
+  for (const foraging of [undefined, 'walkthrough']) {
+    const config = { ...starter(), foraging, endMode:'timed', duration:10, predation:false }
+    const field = dawn(config, 1, founders(config))
+    const b = field.blobs.find(blob => blob.x <= REFUGE_WIDTH)
+    field.blobs = [b]
+    field.tick = field.limit - 1
+    Object.assign(b, { x:FIELD - REFUGE_WIDTH - 5, y:250, angle:0, credits:2 })
+    const result = step(field, config)
+    assert.equal(result.summary.rows.all.births, 1)
+    assert.equal(b.home, true)
+    assert.equal(b.x, FIELD - REFUGE_WIDTH)
+    assert.equal(b.velocityX, 0)
+    const arrival = field.events.find(e => e.type === 'home')
+    assert.ok(Math.abs(arrival.time - .95) < 1e-10)
+    assert.equal(result.checkpoint.roster.length, 2)
+  }
+})
+
+test('dusk accepts fed blobs in the gray border and rejects missed, unfed, and depleted blobs', () => {
+  for (const foraging of [undefined, 'walkthrough']) {
+    const config = { ...starter(), foraging, endMode:'timed', duration:10, predation:false }
+    const field = dawn(config, 1, founders(config))
+    const [fed, missed, hungry, depleted] = field.blobs
+    field.blobs = [fed, missed, hungry, depleted]
+    field.tick = field.limit - 1
+    field.plants = [{ id:0, x:54, y:120, eaten:false }]
+    Object.assign(fed, { x:60, y:120, angle:Math.PI })
+    Object.assign(missed, { x:250, y:250, credits:1 })
+    Object.assign(hungry, { x:30, y:200, angle:0 })
+    Object.assign(depleted, { x:55, y:380, angle:Math.PI, credits:2, energy:depleted.moveCost })
+    const result = step(field, config)
+    assert.deepEqual(result.checkpoint.roster.map(b => b.id), [fed.id])
+    assert.equal(fed.x, REFUGE_WIDTH)
+    const home = field.events.find(e => e.type === 'home')
+    assert.equal(home.id, fed.id)
+    assert.equal(home.time, 1)
+    assert.equal(field.events.find(e => e.id === missed.id).cause, 'Missed home')
+    assert.equal(field.events.find(e => e.id === hungry.id).cause, 'Starvation')
+    assert.equal(field.events.find(e => e.id === depleted.id).cause, 'Energy depletion')
+  }
+})
+
 test('Trends reconstructs each opening cohort from saved results across a branch', () => {
   const setup = starter()
   setup.species[1].enabled = true
@@ -88,6 +172,9 @@ test('Trends reconstructs each opening cohort from saved results across a branch
 test('video experiment settlers and their offspring start the next day at the same refuge', () => {
   const [config] = sizeMutationPair(118, 600)
   const first = dawn(config, 1, founders(config))
+  assert.equal(config.version, WALKTHROUGH_RULE_VERSION)
+  assert.equal(snapshot(first).refugeWidth, 0)
+  assert.equal(setupForNewRun(config).version, VERSION)
   assert.ok(first.blobs.every(b => [b.x, b.y].some(value => value === 0 || value === 500)))
   assert.equal(step(first, config, 12), null)
   const saved = structuredClone(first)
@@ -182,7 +269,7 @@ test('dusk uses survival thresholds and samples each unlocked trait once', () =>
   field.opening = field.opening.slice(0,4)
   Object.assign(one, { credits:1, home:true })
   Object.assign(two, { credits:3, home:true, speed:120 })
-  Object.assign(far, { credits:2, home:false })
+  Object.assign(far, { x:250, y:250, credits:2, home:false })
   const result = dusk(field, config)
   const child = result.checkpoint.roster.find(b => b.parent === two.id)
   const row = result.summary.rows.all
@@ -376,6 +463,7 @@ test('branch histories keep founding traits and apply new food and duration only
   for (let day=1; day<=3; day++) {
     const rules = rulesFor(branch,revisions,day)
     const state = dawn(rules,day,result.checkpoint)
+    assert.equal(snapshot(state).refugeWidth, day < 3 ? 0 : REFUGE_WIDTH)
     assert.equal(state.stepSeconds, day < 3 ? .05 : .1)
     assert.equal(snapshot(state).duration, day < 3 ? 10 : 20)
     result = step(state,rules,state.limit,true)
@@ -383,7 +471,7 @@ test('branch histories keep founding traits and apply new food and duration only
     summaries.push(result.summary)
   }
   const rows = csv({ id:'branch', setup:branch, revisions, summaries }, 'all').split('\r\n').slice(1)
-  assert.deepEqual(rows.map(row => row.split(',')[2]), ['"1"', '"1"', '"4"'])
+  assert.deepEqual(rows.map(row => row.split(',')[2]), ['"1"', '"1"', JSON.stringify(String(VERSION))])
   assert.deepEqual(rows.map(row => row.split(',')[5]), ['"1"', '"1"', '"3"'])
   assert.equal(validateRevisions({ ...branch, seed:2 },revisions),false)
 })

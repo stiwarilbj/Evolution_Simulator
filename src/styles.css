@@ -77,6 +77,7 @@ small{font-size:.84em}
 .board{position:absolute;inset:0;overflow:hidden}
 .board canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
 .board canvas:active{cursor:grabbing}
+.is-overhead .stage>.board{inset:min(var(--overhead-top,65px),55cqh) 0 min(40px,20cqh)}
 .view-tools{position:absolute;z-index:5;top:17px;right:23px;display:flex;gap:3px}
 .layer-panel{right:74px;top:68px;display:flex;flex-direction:column;align-items:center;gap:0}
 .layer{position:relative}
@@ -573,6 +574,7 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
 }
 @media(max-width:840px){
   .run-center{top:43px}
+  .is-overhead{--overhead-top:104px}
   #main-surface.reading-surface{margin-top:112px}
   .stats{display:grid;gap:0}
   .stats-heading select{margin-left:auto}
@@ -585,6 +587,7 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
   .app-header nav a{font-size:17px}
   .app-header nav .brand svg{width:25px;height:25px}
   .run-center{top:46px}
+  .is-overhead{--overhead-top:96px}
   .settings-pill{min-height:34px;min-width:104px;font-size:14px}
   .run-status{min-height:23px}
   .run-menu{top:39px}
@@ -695,6 +698,7 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.001ms!important;transition-duration:.001ms!important}
 }
 .is-following .stage::after,.is-overhead .stage::after{content:'';position:absolute;inset:auto 0 0;height:55px;background:linear-gradient(transparent,#161616a6);pointer-events:none}
+.world:fullscreen.is-overhead{--overhead-top:45px}
 .stats-heading .icon.compact,.ribbon-actions .icon.compact,.rate-panel .icon.compact{min-height:27px}
 .trend-annotations{display:flex;gap:4px 12px;flex-wrap:wrap;margin-bottom:8px;font:12px var(--mono)}
 .focus-dialog{width:1050px;background:var(--stage);padding:17px}

@@ -5,7 +5,7 @@ import Board from './Board.vue'
 import TrendPlot from './TrendPlot.vue'
 import { useLab } from '../store.js'
 import { trackFrame } from '../track.js'
-import { usesWalkthroughForaging } from '../engine/config.js'
+import { rulesFor, usesWalkthroughForaging, WALKTHROUGH_RULE_VERSION } from '../engine/config.js'
 import { format, METRICS, metricValue } from '../engine/stats.js'
 import { SIZE_MUTATION_SEED, sizeMutationPair } from '../experiments.js'
 
@@ -72,7 +72,8 @@ const largestHuntGap=computed(()=>{
 })
 const videoPair=computed(()=>{
   const match=(run,size)=>run.setup.seed===SIZE_MUTATION_SEED && run.setup.name.startsWith('Size mutation · '+(size===1?'Wide':'Narrow')) &&
-    run.setup.food===50 && run.setup.foraging==='walkthrough' && run.setup.species.some(s=>s.enabled && s.standardDeviation?.size===size) && run.summaries.length>=77
+    run.setup.food===50 && run.setup.foraging==='walkthrough' && run.setup.species.some(s=>s.enabled && s.standardDeviation?.size===size) &&
+    run.summaries.length>=77 && [6,77].every(day=>rulesFor(run.setup, run.revisions, day).version===WALKTHROUGH_RULE_VERSION)
   const wide=available.value.find(run=>match(run,1))
   const narrow=available.value.find(run=>match(run,.5))
   return wide && narrow && wide.id!==narrow.id ? { wide,narrow } : null

@@ -1,9 +1,10 @@
-import { starter } from './engine/config.js'
+import { starter, WALKTHROUGH_RULE_VERSION } from './engine/config.js'
 
 export const SIZE_MUTATION_SEED = 118
 export const SIZE_MUTATION_DAYS = 600
 
 function applySizeExperiment(config, size, seed = SIZE_MUTATION_SEED, days = SIZE_MUTATION_DAYS) {
+  config.version = WALKTHROUGH_RULE_VERSION
   config.seed = seed
   config.days = days
   config.foraging = 'walkthrough'

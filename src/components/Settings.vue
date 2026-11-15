@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { CircleX, Copy, Dices, Plus, Check, Trash2 } from 'lucide-vue-next'
 import { useLab } from '../store.js'
 import { endsWhenSettled, LEGACY_RULE_VERSION, MAX_SEED, PALETTE, SETTLED_RULE_VERSION, TRAITS,
-  randomSeed, speciesTemplate, usesStandardDeviation, usesWalkthroughForaging, validate } from '../engine/config.js'
+  randomSeed, speciesTemplate, usesRefugeBorder, usesStandardDeviation, usesWalkthroughForaging, validate } from '../engine/config.js'
 import { travel, cost, walkthroughStepCost } from '../engine/geometry.js'
 import NumberField from './NumberField.vue'
 
@@ -242,7 +242,10 @@ onMounted(()=>dialog.value.showModal())
             <label v-if="standardDeviation">Foraging rules <select v-model="foraging">
               <option value="standard">Standard</option><option value="walkthrough">Video experiment</option>
             </select></label>
-            <small v-if="foraging==='walkthrough'" class="quiet">Blobs turn in steps and start the next day where their parents reached the edge.</small>
+            <small v-if="foraging==='walkthrough'" class="quiet">
+              {{ usesRefugeBorder(draft) ? 'Blobs turn in steps and start each day along all four gray sides.' :
+                'Blobs turn in steps and start the next day where their parents reached the edge.' }}
+            </small>
             <label><input v-model="draft.predation" type="checkbox"> Predation</label>
             <label><input v-model="draft.sameSpecies" type="checkbox" :disabled="!draft.predation"> Same-species hunting</label>
             <small v-if="draft.predation" class="quiet predation-note">

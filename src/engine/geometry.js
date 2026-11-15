@@ -1,6 +1,7 @@
 import { LEGACY_RULE_VERSION } from './config.js'
 
 export const FIELD = 500
+export const REFUGE_WIDTH = 50
 export const DT = 0.05
 export const WALKTHROUGH_STEP = 0.1
 export const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
@@ -22,26 +23,46 @@ export function turn(from, to) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from))
 }
 
-export function edgePoint(x, y) {
+export function edgePoint(x, y, width = 0) {
   const side = Math.min(y, FIELD - x, FIELD - y, x)
-  if (side === y) return { x, y: 0 }
-  if (side === FIELD - x) return { x: FIELD, y }
-  if (side === FIELD - y) return { x, y: FIELD }
-  return { x: 0, y }
+  if (width && side <= width) return { x, y }
+  if (side === y) return { x, y: width }
+  if (side === FIELD - x) return { x: FIELD - width, y }
+  if (side === FIELD - y) return { x, y: FIELD - width }
+  return { x: width, y }
 }
 
-export function homePoints(blob) {
-  const edge = blob.r + 6
+export function refugeDistance({ x, y }, width) {
+  return Math.max(0, Math.min(x, y, FIELD - x, FIELD - y) - width)
+}
+
+export function homePoints(blob, width = 0) {
+  if (width && refugeDistance(blob, width) === 0) {
+    return [{ x: blob.x, y: blob.y, dx: 0, dy: 0, distance: 0 }]
+  }
+  const edge = width || blob.r + 6
   return [
     { x: edge, y: blob.y }, { x: FIELD - edge, y: blob.y },
     { x: blob.x, y: edge }, { x: blob.x, y: FIELD - edge }
   ].map(point => {
     const dx = point.x - blob.x, dy = point.y - blob.y
     const distance = Math.hypot(dx, dy)
-    return { ...point, dx, dy, distance: distance <= 6 && (
+    return { ...point, dx, dy, distance: !width && distance <= 6 && (
       blob.x <= edge || blob.x >= FIELD - edge || blob.y <= edge || blob.y >= FIELD - edge
     ) ? 0 : distance }
   }).sort((a, b) => a.distance - b.distance)
+}
+
+// Fraction along a movement segment at its first entry into any side of the border.
+export function refugeContact(path, width) {
+  const { x, y, dx, dy } = path
+  const distances = [[x, x + dx], [y, y + dy], [FIELD - x, FIELD - (x + dx)], [FIELD - y, FIELD - (y + dy)]]
+  let time = Infinity
+  for (const [start, end] of distances) {
+    if (start <= width) return 0
+    if (end <= width) time = Math.min(time, (start - width) / (start - end))
+  }
+  return time
 }
 
 export function pathOf(blob, direction, speed, stepSeconds) {

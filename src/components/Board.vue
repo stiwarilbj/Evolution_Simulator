@@ -2,7 +2,7 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { clamp } from '../engine/geometry.js'
+import { clamp, FIELD } from '../engine/geometry.js'
 import CreatureThought from './CreatureThought.vue'
 
 const props = defineProps({
@@ -33,9 +33,11 @@ const cast = new THREE.Raycaster()
 const mouse = new THREE.Vector2()
 const reduced = matchMedia('(prefers-reduced-motion: reduce)')
 const radiusGeometry = new THREE.CircleGeometry(1, 32)
-const boardSize = 500
+const homeColor = '#E5E5E5'
+const legacyOutlineSize = FIELD - 16
 const meshKinds = {}
 let renderer, canvas, ctx, orbit, resize, raf, down, previousFrame, height = 1, width = 1, dirty = true
+let tabletop, refugeSurface, refugeOutline
 let contact, contactTexture
 let bodyIds = [], screenBlobs = [], followed = false, manual = false, previousTime = 0
 let lastPose, nextPose, poseChangedAt = 0, recentDeaths = new Set(), recentBites = new Map()
@@ -65,20 +67,27 @@ function placeBoard() {
     ['#9C9C9C','#AAAAAA','#CDCDCD','#888888','#A3A3A3','#AAAAAA'].map(fill => new THREE.MeshBasicMaterial({ color:fill })))
   slab.position.y = -6
   scene.add(slab)
-  const tabletop = new THREE.Mesh(new THREE.PlaneGeometry(boardSize, boardSize), new THREE.MeshBasicMaterial({ color: '#ffffff' }))
+  const plane = new THREE.PlaneGeometry(FIELD, FIELD)
+  refugeSurface = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ color: homeColor }))
+  refugeSurface.rotation.x = -Math.PI / 2
+  refugeSurface.position.y = -0.8
+  tabletop = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ color: '#ffffff' }))
   tabletop.rotation.x = -Math.PI / 2
   tabletop.position.y = -0.7
-  scene.add(tabletop)
+  scene.add(refugeSurface, tabletop)
   const ambient = new THREE.AmbientLight('#ffffff', 1.35)
   const lamp = new THREE.DirectionalLight('#ffffff', 1.65)
   lamp.position.set(-100, 200, -10)
   scene.add(ambient, lamp)
-  const outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(484, 0.01, 484)),
+  const corners = new THREE.PlaneGeometry(legacyOutlineSize, legacyOutlineSize)
+  const edgeGeometry = new THREE.EdgesGeometry(corners)
+  corners.dispose()
+  refugeOutline = new THREE.LineSegments(edgeGeometry,
     new THREE.LineDashedMaterial({ color: '#6C847C', dashSize: 7, gapSize: 5, transparent: true, opacity: .65 }))
-  outline.position.y = 0.05
-  outline.computeLineDistances()
-  outline.name = 'homes'
-  scene.add(outline)
+  refugeOutline.rotation.x = -Math.PI / 2
+  refugeOutline.position.y = 0.05
+  refugeOutline.computeLineDistances()
+  scene.add(refugeOutline)
 }
 
 function meshes() {
@@ -249,7 +258,13 @@ function draw3d(blobs, frame, view, { min, max }) {
     }
   })
   outlines.forEach((b,i)=>write(ring, i, b===chosen?'#33786D':'#C92922', b.x-250, .14, b.y-250, b.r*1.53, b.r*1.53, 1, -Math.PI/2))
-  scene.getObjectByName('homes').visible = !!props.layers?.homes
+  const refugeWidth = frame.refugeWidth ?? 0
+  const interior = FIELD - 2 * refugeWidth
+  refugeSurface.visible = refugeWidth > 0
+  tabletop.scale.set(interior / FIELD, interior / FIELD, 1)
+  refugeOutline.visible = !!props.layers?.homes
+  const outlineScale = refugeWidth ? interior / legacyOutlineSize : 1
+  refugeOutline.scale.set(outlineScale, outlineScale, 1)
   for (const [, , mesh] of Object.values(meshKinds)) if (mesh) {
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
@@ -283,10 +298,14 @@ function spotlight(blob, view) {
   visionMask.value?.setAttribute('d', backdrop + (hole.length ? 'M' + hole.join('L') + 'Z' : ''))
 }
 
-function polygon(points, fill) {
+function polygonPath(points) {
   ctx.beginPath()
   points.forEach(({x,y}, i) => i ? ctx.lineTo(x,y) : ctx.moveTo(x,y))
   ctx.closePath()
+}
+
+function polygon(points, fill) {
+  polygonPath(points)
   ctx.fillStyle = fill
   ctx.fill()
 }
@@ -313,18 +332,19 @@ function draw2d(blobs, frame, view, { min, max }) {
     polygon([top[i],top[j],bottom[j],bottom[i]], i % 2 ? '#969696' : '#AAAAAA')
   }
   polygon(top, '#CDCDCD')
-  const field = corners(250).map(([x,z]) => p(x,0,z))
-  polygon(field, '#FFFFFF')
+  const refugeWidth = frame.refugeWidth ?? 0
+  const field = corners(FIELD / 2).map(([x,z]) => p(x,0,z))
+  const interior = FIELD / 2 - refugeWidth
+  polygon(field, refugeWidth ? homeColor : '#FFFFFF')
   ctx.save()
   ctx.clip()
+  if (refugeWidth) polygon(corners(interior).map(([x,z]) => p(x,0,z)), '#FFFFFF')
   const eligible = b => !props.layers?.selected || b.id === props.selected
   if (props.layers?.homes) {
-    const points = corners(242).map(([x,z]) => p(x,0,z))
+    const points = corners(refugeWidth ? interior : legacyOutlineSize / 2).map(([x,z]) => p(x,0,z))
     ctx.strokeStyle = '#6C847C'
     ctx.setLineDash([4,3])
-    ctx.beginPath()
-    points.forEach(({x,y},i) => i ? ctx.lineTo(x,y) : ctx.moveTo(x,y))
-    ctx.closePath()
+    polygonPath(points)
     ctx.stroke()
     ctx.setLineDash([])
   }
@@ -407,7 +427,7 @@ function fit() {
   height = host.value.clientHeight
   camera.aspect = width / height
   camera.updateProjectionMatrix()
-  const units = 355 * Math.max(1, height / width)
+  const units = (props.tabletop ? 300 : 355) * Math.max(1, height / width)
   overhead.left = -units * width / height
   overhead.right = -overhead.left
   overhead.top = units
