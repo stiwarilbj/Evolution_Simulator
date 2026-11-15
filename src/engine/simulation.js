@@ -1,7 +1,8 @@
-import { endsWhenSettled, plantsForDay, TRAITS, usesRefugeBorder, usesStandardDeviation, usesWalkthroughForaging } from './config.js'
+import { endsWhenSettled, plantsForDay, TRAITS, usesImprovedSteering, usesRefugeBorder, usesStandardDeviation, usesWalkthroughForaging } from './config.js'
 import { random, normal, shuffle } from './random.js'
 import { summaries } from './stats.js'
 import { forage } from './foraging.js'
+import { improvedIntent, steer } from './steering.js'
 import { FIELD, REFUGE_WIDTH, DT, WALKTHROUGH_STEP, Grid, clamp, radius, travel, cost, walkthroughStepCost,
   canHunt, turn, edgePoint, homePoints, refugeContact, refugeDistance, pathOf, contact } from './geometry.js'
 
@@ -87,6 +88,7 @@ function eat(ctx, config, blob, target, time, type) {
   const extra = { target: target.id, beforeEnergy }
   if (type === 'plant') {
     target.eaten = true
+    if (blob.steering?.plant?.id === target.id) blob.steering.plant = null
     blob.energy = Math.min(blob.capacity, blob.energy + config.plantReward)
   } else {
     blob.preyCredits++
@@ -166,6 +168,8 @@ function intent(blob, ctx, config, plantGrid, blobGrid) {
 
 function tick(ctx, config) {
   const seconds = ctx.stepSeconds ?? DT
+  const improved = usesImprovedSteering(config)
+  const timeLeft = (stepLimit(ctx, config) - ctx.tick) * seconds
   const discreteCost = config.metabolism === 'walkthrough'
   const homeFraction = path => refugeContact(path, ctx.refugeWidth || path.blob.r + 6)
   const active = ctx.blobs.filter(b => {
@@ -193,12 +197,19 @@ function tick(ctx, config) {
   const paths = new Map()
   // All intent queries read positions and velocities from the opening tick.
   for (const blob of active) {
-    const wanted = intent(blob, ctx, config, plantGrid, blobGrid)
-    blob.angle += clamp(turn(blob.angle, wanted), -2 * Math.PI * seconds, 2 * Math.PI * seconds)
-    const path = { ...pathOf(blob, blob.angle, blob.speedWorld, seconds), spent: 0, blob }
+    const wanted = improved ? improvedIntent(blob, ctx, config, plantGrid, blobGrid, timeLeft)
+      : intent(blob, ctx, config, plantGrid, blobGrid)
+    let motion
+    if (improved) motion = steer(blob, wanted, seconds)
+    else {
+      const angle = blob.angle + clamp(turn(blob.angle, wanted), -2 * Math.PI * seconds, 2 * Math.PI * seconds)
+      motion = { ...pathOf(blob, angle, blob.speedWorld, seconds), angle }
+    }
+    const path = { ...motion, spent: 0, blob }
     paths.set(blob.id, path)
     pathGrid.insert(path, path.x, path.y, path.x + path.dx, path.y + path.dy)
   }
+  for (const path of paths.values()) path.blob.angle = path.angle
 
   const move = (path, t) => {
     const b = path.blob

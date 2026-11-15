@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
-import { LEGACY_RULE_VERSION, starter, WALKTHROUGH_RULE_VERSION } from '../src/engine/config.js'
+import { LEGACY_RULE_VERSION, REFUGE_RULE_VERSION, starter, WALKTHROUGH_RULE_VERSION } from '../src/engine/config.js'
 import { guideSource } from '../src/guide-replay.js'
 
 async function openSimulator(page) {
@@ -43,6 +43,23 @@ function dayTile(page, day) {
 async function openRunLibrary(page) {
   await page.getByRole('button', { name: 'Run options' }).click()
   await page.getByRole('button', { name: 'Run Library' }).click()
+}
+
+async function startRefugeFixture(page, configure) {
+  const setup = { ...starter(REFUGE_RULE_VERSION), name:'Browser test run', days:10, mode:'live' }
+  configure?.(setup)
+  await openRunLibrary(page)
+  await page.getByRole('dialog', { name:'Run Library' }).locator('input[type=file]').setInputFiles({
+    name:'refuge-rules.json', mimeType:'application/json', buffer:Buffer.from(JSON.stringify(setup)),
+  })
+  await page.getByRole('button', { name:'Evolve!' }).click()
+  await expect(page.getByRole('button', { name:'Run options' })).toHaveText('Day 1 / 10 · Ready')
+}
+
+function historicalCohort(setup) {
+  setup.endMode = 'timed'
+  setup.food = 400
+  Object.assign(setup.species[1], { enabled:true, energy:1000 })
 }
 
 async function fieldColors(page, canvas) {
@@ -259,10 +276,7 @@ test('live generations end when settled and Quick Sim stops at the extinction ti
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await openSimulator(page)
-  await startRun(page, '10', async () => {
-    await page.getByRole('spinbutton', { name: 'Random seed' }).fill('6')
-    await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('10')
-  })
+  await startRefugeFixture(page, setup => Object.assign(setup, { seed:6, food:10 }))
   await expect(page.getByText('0.00 s elapsed')).toBeVisible()
   await page.getByRole('button', { name: 'Play through generations' }).click()
   const speed = page.getByRole('button', { name: 'Viewing speed', exact: true })
@@ -470,6 +484,112 @@ test('World continues drawing live playback after losing WebGL', async ({ page }
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeEnabled()
   await expect.poll(elapsed).toBeGreaterThan(fallbackTime)
   await expect.poll(() => canvas.evaluate((element, image) => element.toDataURL() !== image, startingImage)).toBe(true)
+  expect(errors).toEqual([])
+})
+
+test('slow live playback draws intermediate poses and replay seeks directly to the requested pose', async ({ page }) => {
+  await page.addInitScript(() => {
+    const motion = window.motionTest = { time:0, poses:[] }
+    const NativeWorker = window.Worker
+    window.Worker = class extends NativeWorker {
+      constructor(...args) {
+        super(...args)
+        this.addEventListener('message', ({ data }) => {
+          if (data.type === 'frame') motion.time = data.frame.time
+        })
+      }
+    }
+    const painter = CanvasRenderingContext2D.prototype
+    const originals = { clear:painter.fillRect, fill:painter.fill, ellipse:painter.ellipse, gradient:painter.createLinearGradient }
+    const bodyGradients = new WeakSet()
+    let seen = false, center
+    painter.fillRect = function (...args) {
+      if (this.canvas.classList.contains('world-canvas') && this.fillStyle === '#242424') seen = false
+      return originals.clear.apply(this, args)
+    }
+    painter.ellipse = function (x, y, ...args) {
+      if (this.canvas.classList.contains('world-canvas')) center = [x.toFixed(2), y.toFixed(2)].join(',')
+      return originals.ellipse.call(this, x, y, ...args)
+    }
+    painter.createLinearGradient = function (...args) {
+      const gradient = originals.gradient.apply(this, args)
+      if (this.canvas.classList.contains('world-canvas')) bodyGradients.add(gradient)
+      return gradient
+    }
+    painter.fill = function (...args) {
+      if (!seen && bodyGradients.has(this.fillStyle)) {
+        motion.poses.push({ time:motion.time, center })
+        seen = true
+      }
+      return originals.fill.apply(this, args)
+    }
+  })
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+  await openSimulator(page)
+  await startRun(page, '10', () => fixedDay(page))
+  const field = page.getByRole('region', { name:'Simulation field' })
+  const canvas = field.locator('canvas.world-canvas')
+  await page.getByRole('button', { name:'View options' }).click()
+  await page.getByRole('button', { name:/^Overhead/ }).click()
+  const nextPaint = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  const position = () => page.evaluate(() => window.motionTest.poses.at(-1)?.center)
+  await nextPaint()
+  const initial = await canvas.screenshot()
+  const elapsed = page.getByRole('progressbar', { name:'Current day elapsed' })
+  const readTime = async () => Number(await elapsed.getAttribute('aria-valuenow'))
+  const play = page.getByRole('button', { name:'Play', exact:true })
+  const pause = page.getByRole('button', { name:'Pause', exact:true })
+  await play.click()
+  await expect.poll(readTime).toBeGreaterThan(.2)
+  await pause.click()
+  expect((await canvas.screenshot()).equals(initial)).toBe(false)
+
+  await canvas.evaluate(element => element.getContext('webgl2').getExtension('WEBGL_lose_context').loseContext())
+  await expect(field.getByText('Canvas view', { exact:true })).toBeVisible()
+  const speed = page.getByRole('button', { name:'Viewing speed', exact:true })
+  await speed.click()
+  const slider = page.getByRole('slider', { name:'Viewing speed multiplier' })
+  await slider.fill('0')
+  await speed.click()
+  await page.evaluate(() => { window.motionTest.poses = [] })
+  await play.click()
+  await expect.poll(() => page.evaluate(() => {
+    const { poses, time } = window.motionTest
+    return new Set(poses.filter(pose => pose.time === time).map(pose => pose.center)).size
+  })).toBeGreaterThan(6)
+  await pause.click()
+  await nextPaint()
+  const settled = await position()
+  await nextPaint()
+  expect(await position()).toBe(settled)
+  const pausedTime = await readTime()
+  await page.getByRole('button', { name:'Playback actions' }).click()
+  await page.getByRole('button', { name:'Step one tick', exact:true }).click()
+  await expect.poll(readTime).toBeGreaterThan(pausedTime)
+  await expect.poll(position).not.toBe(settled)
+  await speed.click()
+  await slider.fill('12')
+  await speed.click()
+  const before = await readTime()
+  await play.click()
+  await expect.poll(readTime).toBeGreaterThan(before + .5)
+  await pause.click()
+
+  await quickThrough(page, 1)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
+  await page.getByRole('button', { name:'Watch last day' }).click()
+  const replayTime = page.getByRole('slider', { name:'Replay time' })
+  await replayTime.fill('0')
+  await expect(replayTime).toHaveValue('0')
+  await nextPaint()
+  const dawn = await position()
+  await replayTime.fill('0.5')
+  await expect.poll(position).not.toBe(dawn)
+  await replayTime.fill('0')
+  await expect.poll(position).toBe(dawn)
+  await page.getByRole('button', { name:'Next day' }).click()
+  await expect(page.getByRole('button', { name:'Run options' })).toHaveText('Day 2 / 10 · Ready')
   expect(errors).toEqual([])
 })
 
@@ -1066,13 +1186,7 @@ test('Trends compares sight spread in the filtered days and opens each closing c
     }
   })
   await openSimulator(page)
-  await startRun(page, '10', async () => {
-    await fixedDay(page)
-    await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('400')
-    await page.getByRole('button', { name: /^Orange/ }).click()
-    await page.getByLabel('Enabled', { exact: true }).check()
-    await page.getByRole('spinbutton', { name: 'Energy', exact: true }).fill('1000')
-  })
+  await startRefugeFixture(page, historicalCohort)
   await quickThrough(page, 3)
   await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
   await page.getByRole('button', { name: 'Close', exact: true }).click()
@@ -1192,13 +1306,7 @@ test('guided sight comparison opens the early and Day 648 cohorts without changi
 
 test('Trait Space shows exact ages and newborn shares for both days and the selected species', async ({ page }) => {
   await openSimulator(page)
-  await startRun(page, '10', async () => {
-    await fixedDay(page)
-    await page.getByRole('spinbutton', { name: 'Food', exact: true }).fill('400')
-    await page.getByRole('button', { name: /^Orange/ }).click()
-    await page.getByLabel('Enabled', { exact: true }).check()
-    await page.getByRole('spinbutton', { name: 'Energy', exact: true }).fill('1000')
-  })
+  await startRefugeFixture(page, historicalCohort)
   await quickThrough(page, 3)
   await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
   await page.getByRole('button', { name: 'Close', exact: true }).click()
@@ -1756,7 +1864,7 @@ test('a replay applies the predation threshold saved with its setup', async ({ p
 
 test('replay shows food credits without refills and refuge distance while returning', async ({ page }) => {
   await openSimulator(page)
-  await startRun(page)
+  await startRefugeFixture(page)
   await quickThrough(page, 1)
   await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
   await page.getByRole('button', { name: 'Watch last day' }).click()

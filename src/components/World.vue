@@ -53,7 +53,9 @@ const cohort = computed(() => {
 })
 const fraction = computed(() => lab.dayEnded ? 1 : lab.displayDuration ? (lab.frame?.time ?? 0) / lab.displayDuration : 0)
 const transportLabel = computed(() => lab.playing ? 'Pause' : lab.replay && lab.dayEnded ? 'Replay day' : 'Play')
-const rateText = computed(() => Number((2**((lab.rate-6)/2)).toFixed(3))+'×')
+const playbackSpeed = computed(() => 2 ** ((lab.rate - 6) / 2))
+const rateText = computed(() => Number(playbackSpeed.value.toFixed(3))+'×')
+const liveRate = computed(() => !lab.replay && lab.playing && !lab.loading && !lab.batch ? playbackSpeed.value : null)
 const events = computed(() => (lab.frame?.events ?? []).filter(e => e.time <= (lab.frame?.time ?? 0)))
 const creatureEvents = computed(() => events.value.filter(e => e.id===lab.selected || e.target===lab.selected && e.type==='prey' ||
   e.type==='birth' && e.parent===lab.selected))
@@ -144,6 +146,7 @@ defineExpose({ select, overhead })
     <section class="stage" aria-label="Simulation field">
       <Board ref="board" :frame="lab.frame" :species="lab.run.setup.species" :layers="layers" :selected="lab.selected"
         :follow="lab.following" :camera="camera" :scope="lab.scope" :dim="dim" :quality="quality" :speed-range="speedRange" tabletop
+        :playback-run="lab.replay ? undefined : lab.run.id" :live-rate="liveRate" :live-finished="!lab.replay && lab.dayEnded"
         @select="select" @fallback="fallback=true"/>
       <div class="view-tools">
         <button class="icon" aria-label="Layers" title="Layers" :aria-expanded="tool==='layers'" @click="toggle('layers')"><Layers :size="23"/></button>

@@ -1,12 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { LEGACY_RULE_VERSION, MAX_SEED, SETTLED_RULE_VERSION, VERSION, WALKTHROUGH_RULE_VERSION, starter, plantsForDay, randomSeed,
+import { LEGACY_RULE_VERSION, MAX_SEED, REFUGE_RULE_VERSION, SETTLED_RULE_VERSION, VERSION, WALKTHROUGH_RULE_VERSION, starter, plantsForDay, randomSeed,
   rulesFor, setupForNewRun, speciesTemplate, validate, validateRevisions } from '../src/engine/config.js'
 import { canHunt, cost, FIELD, radius, REFUGE_WIDTH, refugeDistance, walkthroughStepCost } from '../src/engine/geometry.js'
 import { normal } from '../src/engine/random.js'
 import { dawn, dusk, founders, snapshot, step } from '../src/engine/simulation.js'
 import { distribution, openingTrends } from '../src/engine/stats.js'
 import { prepareTrack, trackFrame } from '../src/track.js'
+import { createLivePlayback } from '../src/live-playback.js'
 import { csv } from '../src/export.js'
 import { sizeMutationPair } from '../src/experiments.js'
 
@@ -52,6 +53,96 @@ test('dawn balances all four edges, resets credits and capacity, and keys food b
   assert.deepEqual(field.plants, dawn(config, 1, opening).plants)
   assert.notDeepEqual(field.plants, dawn(config, 2, opening).plants)
   assert.notDeepEqual(field.plants, dawn({ ...config, seed: 99 }, 1, opening).plants)
+})
+
+function steeringField(config, poses) {
+  const field = dawn(config, 1, founders(config))
+  field.plants = []
+  field.blobs = field.blobs.slice(0, poses.length)
+  field.blobs.forEach((blob, index) => Object.assign(blob, {
+    x:250, y:250, angle:0, speedWorld:100, sense:100, r:2.5,
+  }, poses[index]))
+  return field
+}
+
+test('new Standard runs prefer the quicker intercept and version 5 keeps the historical chase', () => {
+  for (const config of [starter(), starter(REFUGE_RULE_VERSION)]) {
+    assert.deepEqual(validate(config), {})
+    assert.equal(setupForNewRun(config).version, VERSION)
+    const field = steeringField(config, [
+      { size:20 }, { x:270, speedWorld:30, velocityX:30 }, { y:330, speedWorld:10, velocityY:10 },
+    ])
+    step(field, config)
+    const [hunter, near] = field.blobs
+    assert.equal(hunter.state, 2)
+    if (config.version === VERSION) {
+      assert.equal(hunter.steering.id, near.id)
+      assert.equal(hunter.x, 260)
+      assert.equal(hunter.y, 250)
+    } else {
+      assert.equal(hunter.angle, Math.PI / 5)
+      assert.equal(hunter.steering, undefined)
+    }
+  }
+})
+
+test('blobs stick with a viable plant and only remember unseen food briefly', () => {
+  const config = { ...starter(), predation:false }
+  const field = steeringField(config, [{ x:150, sense:50 }])
+  const [blob] = field.blobs
+  const plant = { id:1, x:190, y:250 }
+  field.plants = [plant]
+  step(field, config)
+  assert.equal(blob.steering.id, 1)
+  field.plants.push({ id:2, x:185, y:250 })
+  blob.x = 150
+  step(field, config)
+  assert.equal(blob.steering.id, 1)
+  field.plants.push({ id:3, x:169, y:250 })
+  blob.x = 150
+  step(field, config)
+  assert.equal(blob.steering.id, 3)
+
+  field.plants.forEach(food => { food.eaten = true })
+  const resume = structuredClone(field)
+  resume.blobs[0].x = 150
+  step(resume, config)
+  assert.equal(resume.blobs[0].steering.plant, null, 'Visible absence clears the plant immediately')
+  for (let tick = 0; tick < 6; tick++) {
+    blob.x = 115
+    step(field, config)
+    assert.equal(blob.steering.id, 3, 'An unseen meal can be pursued even if another blob has eaten it')
+  }
+  blob.x = 115
+  step(field, config)
+  assert.equal(blob.steering.plant, null)
+  assert.equal(blob.state, 0)
+})
+
+test('blobs reserve energy for home, choose a safer side, and turn away from walls during an escape', () => {
+  const config = starter()
+  const low = steeringField(config, [{ x:90, y:120, angle:Math.PI, credits:1, energy:60 }])
+  step(low, config, 4)
+  assert.equal(low.blobs[0].home, true)
+  assert.equal(low.blobs[0].x, REFUGE_WIDTH)
+  assert.ok(low.blobs[0].energy > 0)
+
+  const returning = steeringField(config, [
+    { x:67, y:65, credits:1 }, { x:55, y:65, size:20, velocityX:100 },
+  ])
+  step(returning, config)
+  assert.equal(returning.blobs[0].state, 4)
+  assert.equal(returning.blobs[0].steering.home, 2)
+  assert.ok(returning.blobs[0].y < 65)
+
+  const corner = steeringField(config, [
+    { x:6, y:18, angle:Math.PI / 2 }, { x:24, y:18, size:20, angle:Math.PI, velocityX:-100 },
+  ])
+  step(corner, config)
+  const [escaping] = corner.blobs
+  assert.equal(escaping.state, 3)
+  assert.ok(escaping.x > escaping.r && escaping.y > 18, 'The blob avoids the wall and moves away along the edge')
+  assert.ok(Math.abs(escaping.angle - Math.PI / 2) <= Math.PI / 5 + 1e-9)
 })
 
 test('the painted border redistributes survivors and newborns, with food confined to the white field', () => {
@@ -438,6 +529,39 @@ test('replay seeks across a bite and an exact death without smearing energy or p
   assert.equal(bite.plants.length,0)
   assert.equal(death.blobs[0].alive,false)
   assert.equal(death.blobs[0].energy,0)
+})
+
+test('live animation samples confirmed poses at playback speed and preserves exact meal and home times', () => {
+  const initial = { id:1, x:70, y:100, angle:Math.PI + .2, alive:true, home:false, credits:0, preyCredits:0, energy:100, state:1 }
+  const plant = { id:0, x:64, y:100 }
+  const a = { day:1, time:0, duration:1, blobs:[initial], plants:[plant], events:[] }
+  const b = { ...a, time:.2, blobs:[{ ...initial, x:50, angle:-Math.PI + .1, home:true, credits:1, energy:83, state:5 }],
+    plants:[], events:[
+      { type:'plant', time:.05, id:1, target:0, x:65, y:100, beforeEnergy:95, energy:98 },
+      { type:'home', time:.15, id:1, x:50, y:100, energy:83 },
+    ] }
+  const show = createLivePlayback()
+  const play = { run:'first', rate:.5 }
+  assert.equal(show(a, 0, play), a)
+  assert.equal(show(b, 400, play).blobs[0].x, 70)
+  const approaching = show(b, 450, play)
+  assert.equal(approaching.blobs[0].x, 67.5)
+  assert.equal(approaching.blobs[0].energy, 97.5)
+  assert.deepEqual(approaching.plants, [plant])
+  const bite = show(b, 500, play)
+  assert.equal(bite.blobs[0].credits, 1)
+  assert.equal(bite.blobs[0].energy, 98)
+  assert.deepEqual(bite.plants, [])
+  const arrival = show(b, 700, play)
+  assert.equal(arrival.blobs[0].x, 50)
+  assert.equal(arrival.blobs[0].home, true)
+  assert.equal(arrival.blobs[0].state, 5)
+  assert.ok(Math.abs(arrival.blobs[0].angle - (Math.PI + .1)) < 1e-9)
+  assert.equal(show(b, 1200, play), b, 'The renderer never advances beyond the worker')
+  const pause = { run:'first' }
+  assert.equal(show(a, 1300, pause), a)
+  assert.equal(show(b, 1500, pause), b, 'Manual seeks and steps take effect immediately')
+  assert.equal(show(a, 1501, { run:'another', rate:8 }), a)
 })
 
 test('CSV exports per-scope rows and distinguishes missing measurements from zero', () => {

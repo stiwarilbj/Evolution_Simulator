@@ -1,18 +1,19 @@
 <script setup>
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { onMounted, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { clamp, FIELD } from '../engine/geometry.js'
+import { createLivePlayback } from '../live-playback.js'
 import CreatureThought from './CreatureThought.vue'
 
 const props = defineProps({
   frame: Object, species: Array, layers: Object, selected: Number, follow: Boolean, camera: String,
-  scope: String, dim: Boolean, quality: String, speedRange: Object, tabletop: Boolean
+  scope: String, dim: Boolean, quality: String, speedRange: Object, tabletop: Boolean,
+  playbackRun: String, liveRate: Number, liveFinished: Boolean
 })
 const emit = defineEmits(['select', 'fallback'])
 const host = ref(null), cloud = ref(null), visionMask = ref(null)
-const followedBlob = computed(() => props.follow && props.camera !== 'overhead'
-  ? props.frame?.blobs.find(b => b.id === props.selected && b.alive) : null)
+const followedBlob = shallowRef(null)
 const hovered = ref(null)
 const stageColor = '#242424'
 const scene = new THREE.Scene()
@@ -39,8 +40,10 @@ const meshKinds = {}
 let renderer, canvas, ctx, orbit, resize, raf, down, previousFrame, height = 1, width = 1, dirty = true
 let tabletop, refugeSurface, refugeOutline
 let contact, contactTexture
-let bodyIds = [], screenBlobs = [], followed = false, manual = false, previousTime = 0
-let lastPose, nextPose, poseChangedAt = 0, recentDeaths = new Set(), recentBites = new Map()
+let pickBody, bodyIds = [], screenBlobs = [], followed = false, manual = false, previousTime = 0
+const samplePlayback = createLivePlayback()
+let active = [], recentBites = new Map()
+const redraw = () => { dirty = true }
 const colors = new Map()
 const visionRim = Array.from({ length: 48 }, (_, i) =>
   [Math.cos(i * Math.PI / 24), Math.sin(i * Math.PI / 24)])
@@ -94,19 +97,24 @@ function meshes() {
   const profile = [[0,0], [.56,.035], [.87,.12], [1,.37], [.96,.67], [.81,.91], [.64,1.2],
     [.53,1.54], [.54,1.86], [.46,2.1], [.29,2.29], [0,2.38]]
   const curve = new THREE.SplineCurve(profile.map(([r,y]) => new THREE.Vector2(r,y)))
-  const shape = new THREE.LatheGeometry(curve.getPoints(32), 20)
-  const vertices = shape.attributes.position
-  for (let i = 0; i < vertices.count; i++) {
-    const y = vertices.getY(i)
-    vertices.setX(i, vertices.getX(i) + Math.max(0, y - 0.9) * .23)
+  function blobShape(points, segments) {
+    const shape = new THREE.LatheGeometry(curve.getPoints(points), segments)
+    const vertices = shape.attributes.position
+    for (let i = 0; i < vertices.count; i++) {
+      const y = vertices.getY(i)
+      vertices.setX(i, vertices.getX(i) + Math.max(0, y - 0.9) * .23)
+    }
+    shape.computeVertexNormals()
+    return shape
   }
-  shape.computeVertexNormals()
   const flat = (opacity = 1) => new THREE.MeshBasicMaterial({
     color: '#ffffff', transparent: opacity < 1, opacity, depthWrite: opacity >= 1, side: THREE.DoubleSide
   })
-  meshKinds.body = [shape, standard('#ffffff')]
+  meshKinds.body = [blobShape(32, 20), standard('#ffffff')]
+  meshKinds.simpleBody = [blobShape(12, 10), standard('#ffffff')]
   meshKinds.eye = [new THREE.SphereGeometry(1, 7, 5), standard('#ffffff')]
   meshKinds.pellet = [new THREE.SphereGeometry(2, 16, 10), standard('#ffffff')]
+  meshKinds.simplePellet = [new THREE.SphereGeometry(2, 8, 5), standard('#ffffff')]
   contactTexture = new THREE.CanvasTexture(contact)
   contactTexture.colorSpace = THREE.SRGBColorSpace
   meshKinds.shadow = [radiusGeometry, new THREE.MeshBasicMaterial({
@@ -136,6 +144,8 @@ function buffer(kind, count) {
   const allocation = Math.max(4, 2 ** Math.ceil(Math.log2(count || 1)))
   const mesh = new THREE.InstancedMesh(geometry, material, allocation)
   mesh.frustumCulled = false
+  // The raycaster's bound must still cover the blobs after they cross the field.
+  if (kind === 'body' || kind === 'simpleBody') mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 100, 0), FIELD)
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
   if (kind === 'vision' || kind === 'shadow' || kind === 'energy') mesh.renderOrder = { vision: 1, shadow: 2, energy: 3 }[kind]
   mesh.count = count
@@ -153,32 +163,25 @@ function write(mesh, index, fill, x, y, z, sx, sy = sx, sz = sx, rx = 0, ry = 0,
   mesh.setColorAt(index, fill instanceof THREE.Color ? fill : color.set(fill))
 }
 
-function frameBlob(b, f, t) {
-  const old = lastPose?.get(b.id)
-  if (!old || t >= 1 || !b.alive || old.state !== b.state || lastPose.day !== f.day) return b
-  const da = b.angle - old.angle
-  return { ...b, x: old.x + (b.x - old.x) * t, y: old.y + (b.y - old.y) * t,
-    angle: old.angle + Math.atan2(Math.sin(da), Math.cos(da)) * t }
-}
-
-function activeBlobs(frame, now) {
+function activeBlobs(frame) {
   if (frame !== previousFrame) {
-    lastPose = nextPose
-    const delta = frame.time - (previousFrame?.time ?? 0)
-    poseChangedAt = delta > 0 && delta <= .12 ? now - 6 : now - 100
-    nextPose = new Map(frame.blobs.map(b => [b.id, b]))
-    nextPose.day = frame.day
-    recentDeaths = new Set()
+    const recentDeaths = new Set()
     recentBites = new Map()
     for (const e of frame.events) if (e.time<=frame.time && frame.time-e.time<.28) {
       if (e.type==='death') recentDeaths.add(e.id)
       if (e.type==='plant' || e.type==='prey') recentBites.set(e.id,e.time)
     }
+    active = frame.blobs.filter(b => b.alive || recentDeaths.has(b.id))
     previousFrame = frame
     dirty = true
   }
-  const t = clamp((now - poseChangedAt) / 36, 0, 1)
-  return frame.blobs.filter(b => b.alive || recentDeaths.has(b.id)).map(b => frameBlob(b, frame, t))
+  return active
+}
+
+function bodyBob(b, frame) {
+  if (reduced.matches || !b.alive || b.state >= 5 || frame.time <= 0 || frame.time >= (frame.duration ?? Infinity)) return 0
+  const bite = props.follow && b.id === props.selected && recentBites.has(b.id) ? 1 - (frame.time - recentBites.get(b.id)) / .28 : 0
+  return Math.sin(frame.time * 17 + b.id) * .1 + bite * .15
 }
 
 function paintColor(b, min, max) {
@@ -196,15 +199,27 @@ function inSightCohort(blob) {
   return blob.alive && (props.scope==='all' || blob.species===props.scope)
 }
 
+function efficient(blobs, frame) {
+  return props.quality === 'efficient' || (props.quality !== 'full' && blobs.length + frame.plants.length >= 450)
+}
+
+function detailBuffer(kind, simpleKind, count, simple) {
+  const inactive = meshKinds[simple ? kind : simpleKind][2]
+  if (inactive) inactive.count = 0
+  return buffer(simple ? simpleKind : kind, count)
+}
+
 function draw3d(blobs, frame, view, { min, max }) {
   const detailed = blobs.length < 1500
+  const simple = efficient(blobs, frame)
   const chosen = blobs.find(b => b.id === props.selected)
   const indicators = props.layers?.selected || !detailed ? (chosen ? [chosen] : []) : blobs
-  const body = buffer('body', blobs.length)
-  const eye = buffer('eye', detailed ? blobs.filter(b => b.alive).length * 2 : 0)
+  const showFace = b => b.alive && ((detailed && !simple) || b.id === props.selected)
+  const body = pickBody = detailBuffer('body', 'simpleBody', blobs.length, simple)
+  const eye = buffer('eye', blobs.filter(showFace).length * 2)
   const crosses = buffer('deadEye', blobs.filter(b => !b.alive).length * 2)
-  const shadows = buffer('shadow', blobs.length + frame.plants.length)
-  const pellets = buffer('pellet', frame.plants.length)
+  const shadows = buffer('shadow', simple ? Number(!!chosen) : blobs.length + frame.plants.length)
+  const pellets = detailBuffer('pellet', 'simplePellet', frame.plants.length, simple)
   let sight = props.layers?.sense ? indicators : []
   if (props.layers?.sense && props.layers.cohortSense) {
     sight = (props.layers.selected ? indicators : blobs).filter(inSightCohort)
@@ -222,8 +237,7 @@ function draw3d(blobs, frame, view, { min, max }) {
   for (const [i, b] of blobs.entries()) {
     const x = b.x - 250, z = b.y - 250, r = Math.max(.25, b.r)
     const moving = b.alive && b.state < 5 && frame.time > 0 && (frame.duration == null || frame.time < frame.duration)
-    const bite = close && b.id===chosen.id && recentBites.has(b.id) ? 1-(frame.time-recentBites.get(b.id))/.28 : 0
-    const bob = moving && !reduced.matches ? Math.sin(frame.time * 17 + b.id) * .10 + bite*.15 : 0
+    const bob = bodyBob(b, frame)
     const born = b.state === 7
     const offset = born ? r * 1.9 : 0
     const turn = b.angle, c = Math.cos(turn), s = Math.sin(turn)
@@ -232,8 +246,10 @@ function draw3d(blobs, frame, view, { min, max }) {
     write(body, i, paintColor(b, min, max), x + offset, lift, z, r, r * (1 - bob), r,
       0, yaw, b.alive ? (moving ? -.08 + bob * .4 : 0) : -1.3)
     bodyIds.push(b.id)
-    write(shadows, i, '#FFFFFF', x + r * .42 + offset, .045, z + r * .15, r * 1.7, r * 1.12, 1, -Math.PI / 2)
-    if (b.alive && detailed) for (const side of [-.30, .30]) {
+    if (!simple || b === chosen) {
+      write(shadows, simple ? 0 : i, '#FFFFFF', x + r * .42 + offset, .045, z + r * .15, r * 1.7, r * 1.12, 1, -Math.PI / 2)
+    }
+    if (showFace(b)) for (const side of [-.30, .30]) {
       const eyeScale = r * (close && b.id === props.selected ? .125 : .103)
       write(eye, eyes++, '#0a0a0a', x + offset + r * (.88 * c - side * s), lift + r * 1.94 * (1 - bob),
         z + r * (.88 * s + side * c), eyeScale)
@@ -244,7 +260,7 @@ function draw3d(blobs, frame, view, { min, max }) {
   frame.plants.forEach((p, i) => {
     const x = p.x - 250, z = p.y - 250
     write(pellets, i, '#83A51E', x, 2.2, z, 1)
-    write(shadows, blobs.length + i, '#FFFFFF', x + .8, .045, z + .35, 3.2, 2.3, 1, -Math.PI / 2)
+    if (!simple) write(shadows, blobs.length + i, '#FFFFFF', x + .8, .045, z + .35, 3.2, 2.3, 1, -Math.PI / 2)
   })
   sight.forEach((b,i)=>write(vision, i, '#E4F5FE', b.x - 250, -.48, b.y - 250, b.sense, b.sense, 1, -Math.PI / 2))
   indicators.forEach((b, i) => {
@@ -349,13 +365,14 @@ function draw2d(blobs, frame, view, { min, max }) {
     ctx.setLineDash([])
   }
   const overheadView = view === overhead
+  const simple = efficient(blobs, frame)
   const markers = blobs.map(b => ({ b, q: p(b.x-250,0,b.y-250), t: p(b.x-250,b.r*2.35,b.y-250) }))
   const plants = frame.plants.map(plant => {
     const x = plant.x-250, z = plant.y-250
     const q = p(x,0,z), t = p(x,2.2,z), edge = p(x+2,2.2,z)
     return { plant, q, t, r:Math.max(1,Math.min(8,Math.hypot(t.x-edge.x,t.y-edge.y))) }
   })
-  plants.forEach(({q,r}) => softShadow(q.x+r*.38,q.y+r*.08,r*1.65,r*(overheadView?1.15:.54)))
+  if (!simple) plants.forEach(({q,r}) => softShadow(q.x+r*.38,q.y+r*.08,r*1.65,r*(overheadView?1.15:.54)))
   markers.forEach(({b,q,t}) => {
     const r = Math.max(1.2, overheadView ? b.r * width/(overhead.right-overhead.left) : Math.hypot(t.x-q.x,t.y-q.y) / 2.15)
     if (props.layers?.sense && b.sense > 0 && eligible(b) && (!props.layers.cohortSense || inSightCohort(b))) {
@@ -364,7 +381,7 @@ function draw2d(blobs, frame, view, { min, max }) {
       const senseRadius = b.sense * scale
       ellipse(q.x,q.y,senseRadius,senseRadius*(overheadView ? 1 : .36),'#E4F5FE')
     }
-    softShadow(q.x+r*.42,q.y+r*.09,r*1.7,r*(overheadView?1.12:.51))
+    if (!simple || b.id === props.selected) softShadow(q.x+r*.42,q.y+r*.09,r*1.7,r*(overheadView?1.12:.51))
     if (props.layers?.energy && eligible(b)) ellipse(q.x,q.y,r*1.46,r*.43,b.energy/b.capacity>.45?'#F4DF86':'#CCCCCC')
     if (b.id === props.selected && !(props.tabletop && props.follow)) {
       ctx.beginPath()
@@ -387,8 +404,8 @@ function draw2d(blobs, frame, view, { min, max }) {
       continue
     }
     const x = q.x, y = q.y
-    const h = Math.max(3,overheadView ? b.r * width/(overhead.right-overhead.left)/.42 : Math.hypot(t.x-x,t.y-y)), r = h*.42
-    const side = Math.cos(b.angle) < 0 ? -1 : 1
+    const stretch = overheadView ? 0 : bodyBob(b, frame)
+    const h = Math.max(3,overheadView ? b.r * width/(overhead.right-overhead.left)/.42 : Math.hypot(t.x-x,t.y-y) * (1-stretch)), r = h*.42
     const fill = paintColor(b,min,max).clone()
     const grad = ctx.createLinearGradient(x-r,y-h,x+r,y)
     grad.addColorStop(0,'#'+fill.clone().lerp(new THREE.Color('#EAF1F0'),.22).getHexString())
@@ -396,16 +413,17 @@ function draw2d(blobs, frame, view, { min, max }) {
     grad.addColorStop(1,'#'+fill.multiplyScalar(.54).getHexString())
     if (props.camera === 'overhead') ellipse(x,y,r,r,grad)
     else {
+      const face = p(b.x-250+b.r*Math.cos(b.angle),0,b.y-250+b.r*Math.sin(b.angle))
+      const side = clamp((face.x-x) / r, -1, 1)
       ctx.save()
       ctx.translate(x,y)
-      ctx.scale(side,1)
       if (!b.alive) ctx.rotate(-1.2)
       ctx.beginPath()
-      ctx.moveTo(-r*.9,-h*.15)
-      ctx.bezierCurveTo(-r*1.25,-h*.42,-r*.44,-h*.65,-r*.40,-h*.82)
-      ctx.bezierCurveTo(-r*.30,-h*1.08,r*.66,-h*1.05,r*.74,-h*.78)
-      ctx.bezierCurveTo(r*.72,-h*.62,r*1.1,-h*.47,r*1.04,-h*.23)
-      ctx.bezierCurveTo(r*.93,h*.04,-r*.7,h*.08,-r*.9,-h*.15)
+      ctx.moveTo(-r,-h*.15)
+      ctx.bezierCurveTo(-r*1.15,-h*.42,r*(-.58+side*.14),-h*.65,r*(-.57+side*.17),-h*.8)
+      ctx.bezierCurveTo(r*(-.48+side*.18),-h*1.08,r*(.48+side*.18),-h*1.08,r*(.57+side*.17),-h*.8)
+      ctx.bezierCurveTo(r*(.58+side*.14),-h*.65,r*1.15,-h*.42,r,-h*.15)
+      ctx.bezierCurveTo(r*.85,h*.06,-r*.85,h*.06,-r,-h*.15)
       ctx.fillStyle=grad
       ctx.fill()
       if (b.id === hovered.value) {
@@ -471,10 +489,11 @@ function draw(now) {
   if (!host.value?.offsetWidth) { raf = requestAnimationFrame(draw); return }
   const delta = Math.min(80, now-previousTime)
   previousTime = now
-  const frame = props.frame
+  const frame = samplePlayback(props.frame, now, { run: props.playbackRun, rate: props.liveRate, finished: props.liveFinished })
   if (frame) {
-    const blobs = activeBlobs(frame, now)
-    const blob = followedBlob.value && blobs.find(b => b.id === props.selected)
+    const blobs = activeBlobs(frame)
+    const blob = props.follow && props.camera !== 'overhead' && blobs.find(b => b.id === props.selected && b.alive)
+    if (followedBlob.value?.id !== blob?.id || followedBlob.value?.state !== blob?.state) followedBlob.value = blob || null
     const follow = !!blob
     if (follow) {
       if (!followed) {
@@ -509,7 +528,7 @@ function draw(now) {
     camera.lookAt(target)
     const view = props.camera === 'overhead' ? overhead : camera
     view.updateMatrixWorld()
-    if (dirty || follow || followed || now-poseChangedAt < 90) {
+    if (dirty || follow || followed) {
       const range = props.speedRange ?? { min:Infinity, max:-Infinity }
       if (props.layers?.speed && !props.speedRange) for (const b of frame.blobs) if (b.state !== 7) {
         range.min = Math.min(range.min, b.speed)
@@ -524,17 +543,17 @@ function draw(now) {
       cloud.value?.place(p.x>28 && p.x<width-28 && p.y>92 && p.y<height-88 ? p : null)
       if (props.layers?.vision) spotlight(blob, view)
     }
-  }
+  } else followedBlob.value = null
   raf = requestAnimationFrame(draw)
 }
 
 function hit(event) {
   const r = canvas.getBoundingClientRect(), x = event.clientX-r.left, y = event.clientY-r.top
   if (!renderer) return [...screenBlobs].reverse().find(b => Math.abs(b.x-x)<b.r+3 && Math.abs(b.y-y)<b.h*.58+3)?.id ?? null
-  if (!meshKinds.body?.[2]) return null
+  if (!pickBody) return null
   mouse.set(x/r.width*2-1,1-y/r.height*2)
   cast.setFromCamera(mouse,props.camera === 'overhead' ? overhead : camera)
-  return bodyIds[cast.intersectObject(meshKinds.body[2])[0]?.instanceId] ?? null
+  return bodyIds[cast.intersectObject(pickBody)[0]?.instanceId] ?? null
 }
 
 function pointerDown(event) { down = { x:event.clientX,y:event.clientY, id:hit(event) } }
@@ -606,6 +625,7 @@ function setupRenderer() {
   if (renderer) mountCanvas()
   resize = new ResizeObserver(fit)
   resize.observe(host.value)
+  reduced.addEventListener('change', redraw)
   raf = requestAnimationFrame(draw)
 }
 watch(() => props.species, list => { for (const s of list ?? []) colors.set(s.id,s.color); dirty = true }, { immediate:true })
@@ -616,6 +636,7 @@ onMounted(setupRenderer)
 onBeforeUnmount(() => {
   cancelAnimationFrame(raf)
   resize?.disconnect()
+  reduced.removeEventListener('change', redraw)
   orbit?.dispose()
   contactTexture?.dispose()
   for (const [g,m,mesh] of Object.values(meshKinds)) { mesh?.dispose(); g.dispose(); m.dispose() }

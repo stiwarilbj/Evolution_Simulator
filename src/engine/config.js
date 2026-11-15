@@ -4,12 +4,14 @@ export const LEGACY_RULE_VERSION = 1
 export const SETTLED_RULE_VERSION = 3
 export const WALKTHROUGH_RULE_VERSION = 4
 export const REFUGE_RULE_VERSION = 5
-export const VERSION = REFUGE_RULE_VERSION
+export const STEERING_RULE_VERSION = 6
+export const VERSION = STEERING_RULE_VERSION
 export const MAX_SEED = 0xffffffff
 export const endsWhenSettled = config => config.version >= SETTLED_RULE_VERSION && config.endMode === 'settled'
 export const usesStandardDeviation = config => config.version >= WALKTHROUGH_RULE_VERSION
 export const usesWalkthroughForaging = config => usesStandardDeviation(config) && config.foraging === 'walkthrough'
 export const usesRefugeBorder = config => config.version >= REFUGE_RULE_VERSION
+export const usesImprovedSteering = config => config.version >= STEERING_RULE_VERSION && !usesWalkthroughForaging(config)
 
 export function speciesTemplate(id, name, color, count = 10, enabled = true, version = VERSION) {
   const spread = usesStandardDeviation({ version })
@@ -38,7 +40,7 @@ export function validate(config) {
       errors[key] = `${name} must be ${integer ? 'a whole number ' : ''}from ${min} to ${max}.`
     }
   }
-  if (!config || ![LEGACY_RULE_VERSION, 2, SETTLED_RULE_VERSION, WALKTHROUGH_RULE_VERSION, VERSION].includes(config.version)) {
+  if (!config || !Number.isInteger(config.version) || config.version < LEGACY_RULE_VERSION || config.version > VERSION) {
     return { setup: 'Choose a setup file with a supported rule version.' }
   }
   if (typeof config.name !== 'string' || !config.name.trim() || config.name.trim().length > 60) errors.name = 'Enter a run name with 1–60 characters.'
@@ -141,7 +143,7 @@ export function randomSeed(exclude = 0) {
 }
 
 export function setupForNewRun(setup) {
-  if (setup.version === WALKTHROUGH_RULE_VERSION) return { ...setup, version: VERSION }
+  if (setup.version === WALKTHROUGH_RULE_VERSION || setup.version === REFUGE_RULE_VERSION) return { ...setup, version: VERSION }
   if (setup.version !== SETTLED_RULE_VERSION) return setup
   const species = setup.species.map(({ variance, ...item }) => ({
     ...item, standardDeviation: Object.fromEntries(TRAITS.map(trait => [trait, Math.sqrt(variance[trait])])),

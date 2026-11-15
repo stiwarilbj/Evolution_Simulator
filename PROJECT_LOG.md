@@ -89,3 +89,8 @@
 - Kept guided replay boards visible in short windows and moved the energy notes below playback controls on narrow screens. Added browser checks for these fixes.
 - Fixed clipped Run Library buttons. Actions now open below their run and wrap to fit the dialog. Added browser checks for keyboard use, renaming, and setup downloads.
 - Added a light-gray home border on all four sides. Blobs spread out around it each day, gather food from the white field, and must get home before the round ends. The overhead board fits below the controls in split windows. Older runs and the video examples keep their original rules.
+
+## 2026-11-15
+
+- Made blobs turn smoothly, stick with promising meals, and briefly remember food they saw. They choose quicker hunts, dodge away from walls, and check that they have time and energy to get back to safety. New Standard runs use these rules. Older runs keep their recorded rules.
+- Smoothed live movement in both board renderers and made replay scrubbing show the selected pose right away. Auto graphics draws less detail on crowded boards. Added tests for steering, playback speed, and replay seeking.
