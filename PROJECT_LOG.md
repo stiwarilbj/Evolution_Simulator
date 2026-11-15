@@ -87,3 +87,4 @@
 - Kept Compare’s independent day input editable until blur, then committed and normalized the selected day. This prevents slow browser updates from reverting typed days.
 - Made Compare pick runs with results when two are available and keep both playback percentages on one line.
 - Kept guided replay boards visible in short windows and moved the energy notes below playback controls on narrow screens. Added browser checks for these fixes.
+- Fixed clipped Run Library buttons. Actions now open below their run and wrap to fit the dialog. Added browser checks for keyboard use, renaming, and setup downloads.

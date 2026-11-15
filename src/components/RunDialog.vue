@@ -10,6 +10,7 @@ const lab=useLab()
 const emit=defineEmits(['compare','watch','world','resume','results'])
 const dialog=ref(), mode=ref('additional'), amount=ref(0), target=ref(1), extension=ref(25)
 const message=ref(''), search=ref(''), file=ref(), removeId=ref(null), renameId=ref(null), newName=ref('')
+const actionsId=ref(null)
 const end=ref(lab.completed), start=ref(1), exportScope=ref(lab.scope), exportKind=ref('csv'), branchDay=ref(Math.max(1,Math.min(lab.viewing,lab.latestBranchDay)))
 const branchFoodOverride = ref(null)
 const branchFood = computed({
@@ -38,6 +39,7 @@ const titles={quick:'Quick Sim','quick-progress':'Simulating generations','quick
   library:'Run Library',download:'Download',table:'Generation statistics',branch:'Branch here'}
 watch(()=>lab.modal,key=>{
   message.value=''
+  if(key!=='library') actionsId.value=null
   if(key==='quick') {
     resumeLive.value=!lab.replay && lab.playing
     if(!lab.replay) lab.stopPlayback()
@@ -191,14 +193,16 @@ onMounted(()=>dialog.value.showModal())
             <small>Seed {{ run.setup.seed }} · Saved through Day {{ run.summaries.at(-1)?.day ?? 0 }}</small></div>
           <button class="secondary" @click="emit('resume',run)">Resume</button>
           <button v-if="run.id!==lab.run.id" class="secondary" @click="emit('compare',run.id)">Compare</button>
-          <details><summary>Actions</summary><div class="library-menu">
+          <button type="button" class="secondary library-action-toggle" :aria-expanded="actionsId===run.id"
+            :aria-controls="'run-actions-'+run.id" @click="actionsId=actionsId===run.id ? null : run.id">Actions</button>
+          <div v-show="actionsId===run.id" :id="'run-actions-'+run.id" class="library-menu" role="group" :aria-label="'Actions for '+run.setup.name">
             <button @click="emit('results',run)">View results</button>
             <button @click="renameId=run.id;newName=run.setup.name">Rename</button>
             <button @click="lab.openSettings({...run.setup,name:(run.setup.name+' copy').slice(0,60)})">Duplicate</button>
             <button @click="setupDownload(run)">Export setup</button>
             <button @click="share(run)">Copy setup link</button>
             <button v-if="run.id!==lab.run.id" @click="removeId=run.id">Delete</button>
-          </div></details>
+          </div>
           <form v-if="renameId===run.id" class="library-confirm" @submit.prevent="lab.rename(run,newName.trim());renameId=null"><label>Name <input v-model="newName" required maxlength="60"></label><button class="primary" :disabled="!newName.trim()">Save</button></form>
           <div v-if="removeId===run.id" class="library-confirm">Delete {{ run.setup.name }}? <button class="secondary" @click="removeId=null">Cancel</button>
             <button class="secondary issue" @click="lab.remove(run.id);removeId=null">Delete run</button></div>

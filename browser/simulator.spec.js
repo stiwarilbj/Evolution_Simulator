@@ -1315,6 +1315,68 @@ test('Trait Space retries a failed comparison without losing the primary day', a
   await expect(creature).toHaveValue(creatureId)
 })
 
+for (const [width, height] of [[320, 420], [1280, 900]]) {
+  test(`Run Library actions fit at ${width} × ${height}${width === 320 ? ' @pages' : ''}`, async ({ page }) => {
+    await openSimulator(page)
+    await startRun(page, '10', () => page.getByLabel('Run name').fill('Archived field'))
+    await startRun(page, '10', () => page.getByLabel('Run name').fill('Active field'))
+    await page.setViewportSize({ width, height })
+    await openRunLibrary(page)
+
+    const library = page.getByRole('dialog', { name: 'Run Library' })
+    const active = library.locator('article').filter({ hasText: '● Active' })
+    const archive = library.locator('article').filter({ hasText: 'Archived field' })
+    const activeToggle = active.getByRole('button', { name: 'Actions', exact: true })
+    const archiveToggle = archive.getByRole('button', { name: 'Actions', exact: true })
+    const activePanel = active.getByRole('group', { name: /^Actions for / })
+    const archivePanel = archive.getByRole('group', { name: 'Actions for Archived field' })
+    const verifyFit = async panel => {
+      await expect(panel).toBeVisible()
+      expect(await panel.evaluate(element => {
+        const dialog = element.closest('dialog')
+        const left = dialog.getBoundingClientRect().left + dialog.clientLeft
+        const right = left + dialog.clientWidth
+        const bounds = element.getBoundingClientRect()
+        return dialog.scrollWidth === dialog.clientWidth && bounds.left >= left && bounds.right <= right &&
+          [...element.querySelectorAll('button')].every(button => {
+            const rect = button.getBoundingClientRect()
+            return rect.left >= bounds.left && rect.right <= bounds.right && button.scrollWidth <= button.clientWidth
+          })
+      })).toBe(true)
+    }
+
+    await activeToggle.press('Enter')
+    await expect(activeToggle).toBeFocused()
+    await expect(activeToggle).toHaveAttribute('aria-expanded', 'true')
+    await verifyFit(activePanel)
+    await expect(activePanel.getByRole('button', { name: 'Delete', exact: true })).toHaveCount(0)
+    await activeToggle.press('Space')
+    await expect(activeToggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(activePanel).toBeHidden()
+    await activeToggle.press('Space')
+    await page.keyboard.press('Tab')
+    await expect(activePanel.getByRole('button', { name: 'View results' })).toBeFocused()
+    await activePanel.getByRole('button', { name: 'Rename', exact: true }).click()
+    await active.getByLabel('Name', { exact: true }).fill('Renamed field')
+    await active.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(active).toContainText('Renamed field')
+
+    await archiveToggle.click()
+    await expect(activeToggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(activePanel).toBeHidden()
+    await expect(archiveToggle).toHaveAttribute('aria-expanded', 'true')
+    await verifyFit(archivePanel)
+    await expect(archivePanel.getByRole('button', { name: 'Delete', exact: true })).toBeVisible()
+    const pendingDownload = page.waitForEvent('download')
+    await archivePanel.getByRole('button', { name: 'Export setup' }).click()
+    const file = await pendingDownload
+    expect(file.suggestedFilename()).toBe('evolution-setup.json')
+    const exported = JSON.parse(await readFile(await file.path(), 'utf8'))
+    expect(exported.setup).toMatchObject({ name: 'Archived field', days: 10 })
+    expect(exported.revisions).toEqual([])
+  })
+}
+
 test('renaming the active run keeps days whose saves are still pending', async ({ page }) => {
   await installSaveDelay(page)
   await openSimulator(page)
