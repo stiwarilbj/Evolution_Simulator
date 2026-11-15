@@ -85,3 +85,5 @@
 - Kept the Age walkthrough’s preparation controls on screen, hid live-run charts until its reference is ready, and protected retry and cancel state from late worker results.
 - Added browser checks for the Compare day and camera controls and for Age walkthrough failure, retry, cancel, and run changes.
 - Kept Compare’s independent day input editable until blur, then committed and normalized the selected day. This prevents slow browser updates from reverting typed days.
+- Made Compare pick runs with results when two are available and keep both playback percentages on one line.
+- Kept guided replay boards visible in short windows and moved the energy notes below playback controls on narrow screens. Added browser checks for these fixes.

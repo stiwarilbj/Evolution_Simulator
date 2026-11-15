@@ -12,9 +12,15 @@ import { SIZE_MUTATION_SEED, sizeMutationPair } from '../experiments.js'
 const props=defineProps({ initial:Object })
 const emit=defineEmits(['library','change'])
 const lab=useLab()
-const available=computed(()=>[lab.run,...lab.library.filter(r=>r.id!==lab.run.id)])
-const leftId=ref(props.initial?.left ?? lab.run.id)
-const rightId=ref(props.initial?.right ?? available.value.find(r=>r.id!==leftId.value)?.id ?? '')
+const available=computed(()=>[
+  lab.run,
+  ...lab.library.filter(run=>run.id!==lab.run.id).sort((a,b)=>b.created-a.created),
+])
+const recordedRuns=available.value.filter(run=>run.summaries.length>0)
+const leftCandidates=recordedRuns.length>=2 ? recordedRuns : available.value
+const leftId=ref(props.initial?.left ?? leftCandidates.find(run=>run.id!==props.initial?.right)?.id ?? '')
+const otherRun=run=>run.id!==leftId.value
+const rightId=ref(props.initial?.right ?? recordedRuns.find(otherRun)?.id ?? available.value.find(otherRun)?.id ?? '')
 const left=computed(()=>available.value.find(r=>r.id===leftId.value))
 const right=computed(()=>available.value.find(r=>r.id===rightId.value))
 const runs=computed(()=>[left.value,right.value])

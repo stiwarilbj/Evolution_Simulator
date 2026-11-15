@@ -2048,6 +2048,53 @@ test('Compare keeps a cleared run selector empty when the page reloads', async (
   }
 })
 
+test('Compare opens runs with results and fits both playback percentages', async ({ page }) => {
+  await openSimulator(page)
+  for (const name of ['First recording', 'Second recording']) {
+    await startRun(page, '10', () => page.getByLabel('Run name').fill(name))
+    await quickThrough(page, 1)
+    await expect(batchStatus(page, 'Saved through')).toHaveText('Day 1')
+    await page.getByRole('button', { name: 'Close', exact: true }).click()
+  }
+
+  const openCompare = async () => {
+    await page.getByRole('button', { name: 'Run options' }).click()
+    await page.getByRole('button', { name: 'Compare runs', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Day 1 results' })).toBeVisible()
+  }
+  const left = page.getByRole('combobox', { name: 'Left run', exact: true })
+  const right = page.getByRole('combobox', { name: 'Right run', exact: true })
+  await openCompare()
+  await expect(left.locator('option:checked')).toContainText('Second recording')
+  await expect(right.locator('option:checked')).toContainText('First recording')
+
+  await page.getByRole('link', { name: 'World', exact: true }).click()
+  await startRun(page, '10', () => page.getByLabel('Run name').fill('Fresh run'))
+  await openCompare()
+  await expect(left.locator('option:checked')).toContainText('Second recording')
+  await expect(right.locator('option:checked')).toContainText('First recording')
+
+  const progress = page.getByRole('slider', { name: 'Shared day progress' })
+  const percentages = page.locator('.comparison-clock output')
+  await expect(progress).toBeEnabled()
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 360, height: 480 }]) {
+    await page.setViewportSize(viewport)
+    await progress.fill('0')
+    await expect(percentages).toHaveText('0% / 0%')
+    const startingSize = await percentages.evaluate(el => [el.offsetWidth, el.offsetHeight])
+    await progress.fill('1')
+    await expect(percentages).toHaveText('100% / 100%')
+    expect(await percentages.evaluate(el => [el.offsetWidth, el.offsetHeight])).toEqual(startingSize)
+    expect(await percentages.evaluate(el => {
+      const range = document.createRange()
+      range.selectNodeContents(el)
+      const text = range.getBoundingClientRect()
+      const output = el.getBoundingClientRect()
+      return range.getClientRects().length === 1 && text.left >= output.left && text.right <= output.right
+    })).toBe(true)
+  }
+})
+
 test('Compare hides stale boards while changing days and can retry the same day', async ({ page }) => {
   await page.addInitScript(() => {
     const NativeWorker = window.Worker

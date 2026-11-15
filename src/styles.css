@@ -468,12 +468,13 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
 .energy-cutaway h4{font-family:var(--mono);color:var(--focus);margin:0 0 8px}
 .energy-cutaway ul{padding-left:18px;margin:0}
 .energy-cutaway .guide-formula{font-family:var(--mono);margin:0 0 8px}
-.guided-world{height:100%;display:flex;flex-direction:column;gap:8px;padding:8px clamp(10px,2vw,24px) 12px;margin:0 auto;max-width:1740px}
+.guided-world{min-height:100%;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(160px,1fr);gap:8px;padding:8px clamp(10px,2vw,24px) 12px;margin:0 auto;max-width:1740px}
+.guided-world.guided-split{grid-template-columns:minmax(0,1fr) clamp(180px,28%,340px)}
+.guided-world>:not(.guided-board,.guided-cost){grid-column:1/-1}
 .guided-heading{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .guided-heading h1{font-size:clamp(20px,3vw,31px);line-height:1.1}
-.guided-stage{flex:1;min-height:0;display:flex;gap:8px}
-.guided-board{flex:1;min-width:0;min-height:0;position:relative;isolation:isolate;border:1px solid var(--line);background:#242424;border-radius:6px;overflow:hidden}
-.guided-cost{width:clamp(180px,28%,340px);display:grid;align-content:center;gap:20px;padding:14px;background:#0c0c0b;color:var(--cream);border:1px solid var(--line);border-radius:6px;font-family:var(--mono)}
+.guided-board{grid-column:1;grid-row:2;min-width:0;position:relative;isolation:isolate;border:1px solid var(--line);background:#242424;border-radius:6px;overflow:hidden}
+.guided-cost{grid-column:2;grid-row:2;display:grid;align-content:center;gap:20px;padding:14px;background:#0c0c0b;color:var(--cream);border:1px solid var(--line);border-radius:6px;font-family:var(--mono)}
 .guided-cost h2{font-size:17px;margin-bottom:6px}
 .guided-cost p{font-size:14px;line-height:1.5}
 .guided-caption{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);max-width:92%;width:max-content;
@@ -495,9 +496,14 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
   .stride-track{grid-column:1/-1;grid-row:2}
   .guided-moments .secondary{font-size:12px;padding-inline:6px}
   .guided-heading .secondary{font-size:12px;padding-inline:6px}
-  .guided-split{flex-direction:column}
-  .guided-cost{width:100%;grid-template-columns:1fr 1fr;gap:8px;padding:8px}
+  .guided-world.guided-split{grid-template-columns:minmax(0,1fr)}
+  .guided-cost{grid-column:1;grid-row:auto;grid-template-columns:1fr 1fr;gap:8px;padding:8px}
   .guided-cost h2,.guided-cost p{font-size:12px}
+  .guided-controls{gap:5px}
+  .guided-controls .icon{height:36px;width:32px}
+  .guided-controls .secondary{gap:4px;padding-inline:6px;font-size:12px}
+  .guided-controls input{min-width:36px}
+  .guided-time{font-size:12px}
 }
 .lesson,.reference-videos,.about>section:last-child{margin-top:27px;padding-top:15px;border-top:1px solid var(--line)}
 .reference-videos,.experiments{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
@@ -539,7 +545,10 @@ th{color:var(--muted);font-size:13px}td{font:14px var(--mono)}th:first-child,td:
 .paired-boards h2{position:relative;z-index:1;padding:8px 12px;font-size:16px;color:var(--run-color);pointer-events:none;text-shadow:0 1px 2px #0a0a0a}
 .paired-boards .board{transition:filter .18s}
 .paired-boards .quiet-board .board{filter:brightness(.43)}
-.paired-boards small{display:block;color:var(--quiet);margin-top:4px}.comparison-clock input{flex:1}.comparison-clock output{width:44px;text-align:right;font-family:var(--mono)}
+.paired-boards small{display:block;color:var(--quiet);margin-top:4px}
+.comparison-clock{flex-wrap:nowrap}
+.comparison-clock input{flex:1;min-width:0}
+.comparison-clock output{flex:none;inline-size:12ch;text-align:right;white-space:nowrap;font-family:var(--mono)}
 .compare-page.cinematic-sequence{position:fixed;inset:0;z-index:1000;width:100vw;height:100dvh;max-width:none;margin:0;padding:0;overflow:hidden;background:var(--stage)}
 .compare-page.cinematic-sequence>:not(.paired-boards){display:none!important}
 .compare-page.cinematic-sequence .paired-boards{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;width:100%;height:100%;min-height:0;border:0}

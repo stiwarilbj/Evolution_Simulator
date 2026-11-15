@@ -104,6 +104,37 @@ test('the stride race and energy lesson explain what bigger blobs spend', async 
   await expect(guide.getByRole('button', { name:'Pause example' })).toBeVisible()
 })
 
+test('guided boards stay visible in a short split window', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 420 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await openWalkthrough(page)
+
+  for (const [lesson, title] of [
+    ['The cost of moving', 'A fixed energy budget'],
+    ['A newborn’s sight', 'From parent to offspring'],
+  ]) {
+    await page.getByRole('button', { name: lesson, exact: true }).click()
+    await page.getByRole('button', { name: 'Try it in World' }).click()
+    const guide = page.getByRole('main', { name: title })
+    const board = guide.locator('.guided-board')
+    const progress = guide.getByRole('slider', { name: 'Example progress' })
+    await expect(progress).toBeEnabled()
+    await expect(board).toBeInViewport({ ratio: 1 })
+    expect((await board.boundingBox()).height).toBeGreaterThanOrEqual(160)
+    await expect(progress).toBeInViewport({ ratio: 1 })
+    await progress.press('End')
+    expect(Number(await progress.inputValue())).toBeGreaterThan(0)
+    if (lesson === 'The cost of moving') {
+      const notes = guide.getByRole('heading', { name: 'Energy cost' })
+      expect((await notes.boundingBox()).y).toBeGreaterThan((await progress.boundingBox()).y)
+      await notes.scrollIntoViewIfNeeded()
+      await expect(notes).toBeInViewport()
+    }
+    expect(await page.evaluate(() => [window.scrollY, document.documentElement.scrollWidth])).toEqual([0, 320])
+    await guide.getByRole('button', { name: 'Back to walkthrough' }).click()
+  }
+})
+
 test('a scarcity replay ends on its Day 4 extinction tile', async ({ page }) => {
   await page.emulateMedia({ reducedMotion:'reduce' })
   await openWalkthrough(page)

@@ -126,35 +126,29 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="guided-world" aria-labelledby="example-title">
+  <main class="guided-world" :class="{ 'guided-split':example==='energy' }" aria-labelledby="example-title">
     <header class="guided-heading">
       <div><span class="quiet">Guided World · Day {{ day }}</span><h1 id="example-title">{{ spec.title }}</h1></div>
       <button class="secondary" @click="emit('exit')">{{ sightExample?'Back to Trends':'Back to walkthrough' }}</button>
     </header>
-    <div class="guided-stage" :class="{ 'guided-split':example==='energy' }">
-      <div class="guided-board" :aria-busy="busy">
-        <Board v-if="moment" :frame="frame" :species="source.setup.species" :layers="layers" :selected="selected"
-          :follow="selected!=null" :camera="spec.camera ?? 'board'" :speed-range="speedRange" scope="all"
-          quality="efficient" @select="selected=$event"/>
-        <div v-else class="stage-note">
-          <p role="status">{{ error || (sightExample ? 'Preparing the sight example · Day '+preparedDay+' of 1,000' : 'Preparing the example…') }}</p>
-          <button v-if="error" class="secondary" @click="load">Retry example</button>
-        </div>
-        <div v-if="moment && speedRange" class="speed-key" aria-label="Body color by speed">
-          <span>Speed · points</span><i aria-hidden="true"></i>
-          <div><span>{{ speedRange.min }}</span><span>{{ speedRange.max }}</span></div>
-        </div>
-        <p v-if="moment?.label" class="guided-caption" role="status">{{ moment.label }}</p>
-        <div v-if="example==='extinction' && end" class="guided-extinction">
-          <button :aria-label="'Extinction on Day '+day+'. Replay the last generation'" @click="restart">
-            <ExtinctionIcon/>Day {{ day }} · Extinct
-          </button>
-        </div>
+    <div class="guided-board" :aria-busy="busy">
+      <Board v-if="moment" :frame="frame" :species="source.setup.species" :layers="layers" :selected="selected"
+        :follow="selected!=null" :camera="spec.camera ?? 'board'" :speed-range="speedRange" scope="all"
+        quality="efficient" @select="selected=$event"/>
+      <div v-else class="stage-note">
+        <p role="status">{{ error || (sightExample ? 'Preparing the sight example · Day '+preparedDay+' of 1,000' : 'Preparing the example…') }}</p>
+        <button v-if="error" class="secondary" @click="load">Retry example</button>
       </div>
-      <aside v-if="example==='energy'" class="guided-cost">
-        <section><h2>What helps</h2><p>Better sight<br>Longer strides<br>Hunting smaller blobs</p></section>
-        <section><h2>Energy cost</h2><p>(Size³ × stride² + sight) ÷ 10,000</p></section>
-      </aside>
+      <div v-if="moment && speedRange" class="speed-key" aria-label="Body color by speed">
+        <span>Speed · points</span><i aria-hidden="true"></i>
+        <div><span>{{ speedRange.min }}</span><span>{{ speedRange.max }}</span></div>
+      </div>
+      <p v-if="moment?.label" class="guided-caption" role="status">{{ moment.label }}</p>
+      <div v-if="example==='extinction' && end" class="guided-extinction">
+        <button :aria-label="'Extinction on Day '+day+'. Replay the last generation'" @click="restart">
+          <ExtinctionIcon/>Day {{ day }} · Extinct
+        </button>
+      </div>
     </div>
     <div class="guided-controls">
       <button class="icon" :disabled="!moment" :aria-label="playing?'Pause example':'Play example'" @click="playing?pause():play()">
@@ -170,6 +164,10 @@ onBeforeUnmount(() => {
       <button v-for="(part,index) in moments" :key="part.label" class="secondary" :aria-pressed="step===index"
         @click="choose(index)">{{ part.label }}</button>
     </div>
+    <aside v-if="example==='energy'" class="guided-cost">
+      <section><h2>What helps</h2><p>Better sight<br>Longer strides<br>Hunting smaller blobs</p></section>
+      <section><h2>Energy cost</h2><p>(Size³ × stride² + sight) ÷ 10,000</p></section>
+    </aside>
     <p class="guided-summary">{{ spec.text }}
       <span v-if="openingSight" class="quiet">Dawn sight · Mean {{ format(openingSight.mean) }} ± {{ format(openingSight.sd) }} · {{ openingSight.n }} blobs</span>
       <span v-if="creature" class="quiet">Blob #{{ creature.id }}

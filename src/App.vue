@@ -191,7 +191,8 @@ function retryReplay() {
   else void lab.retryReplay()
 }
 function compare(id) {
-  openComparison({ left:lab.run.id, right:id ?? null, day:lab.viewing })
+  const pair = id == null ? {} : { left:lab.run.id, right:id }
+  openComparison({ ...pair, day:lab.viewing })
 }
 function openComparison(pair) {
   comparison.value = pair
