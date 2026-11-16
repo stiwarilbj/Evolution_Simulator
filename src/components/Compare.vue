@@ -34,7 +34,7 @@ const days=ref([
 const dayInputs=ref([...days.value])
 const day=ref(initialDay), fractions=ref([0,0]), playing=ref([false,false])
 const replayAvailable=computed(()=>leftId.value!==rightId.value && runs.value.every((run,index)=>run && days.value[index]>=1 && days.value[index]<=runDays.value[index]))
-const tracks=ref([null,null]), pending=ref([false,false]), errors=ref(['','']), replayAttempt=ref([0,0])
+const tracks=ref([null,null]), pending=ref([false,false]), errors=ref(['',''])
 const cameras=ref([props.initial?.leftCamera ?? 'board',props.initial?.rightCamera ?? 'board']), scope=ref('all'), layers=ref({sense:false}), focus=ref('')
 const reveal=ref(false), divider=ref(50), emphasis=ref('both')
 const sequence=ref(false), sequenceStep=ref(0), videoPairProgress=ref(null), videoPairError=ref('')
@@ -53,7 +53,7 @@ const experimentSizes=computed(()=>{
     return { start, finish, change:start!=null && finish!=null ? finish-start : null }
   })
 })
-const frames=computed(()=>tracks.value.map((track,index)=>track && !errors.value.some(Boolean)
+const frames=computed(()=>tracks.value.map((track,index)=>track
   ? trackFrame(track,track.duration*fractions.value[index]) : null))
 const commonSpecies=computed(()=>left.value?.setup.species.filter(s=>s.enabled&&right.value?.setup.species.some(b=>b.enabled&&b.id===s.id)) ?? [])
 const rows=computed(()=>Array.from({length:horizon.value},(_,i)=>({day:i+1,
@@ -282,13 +282,10 @@ async function loadTrack(index) {
     if (token===jobs[index]) pending.value[index]=false
   }
 }
-function retryTracks() {
-  for (let index=0;index<2;index++) if (errors.value[index]) replayAttempt.value[index]++
-}
 watch([leftId,rightId],()=>{ scope.value='all' })
 watch([()=>days.value[0],()=>days.value[1]],values=>{ dayInputs.value=[...values] })
-watch([leftId,()=>days.value[0],()=>replayAttempt.value[0],replayAvailable],()=>{ void loadTrack(0) },{immediate:true})
-watch([rightId,()=>days.value[1],()=>replayAttempt.value[1],replayAvailable],()=>{ void loadTrack(1) },{immediate:true})
+watch([leftId,()=>days.value[0],replayAvailable],()=>{ void loadTrack(0) },{immediate:true})
+watch([rightId,()=>days.value[1],replayAvailable],()=>{ void loadTrack(1) },{immediate:true})
 watch(()=>[runDays.value[0],runDays.value[1]],limits=>{
   for (let index=0;index<2;index++) {
     if (!limits[index]) days.value[index]=1
@@ -357,7 +354,8 @@ watch(sequence,active=>{ if(active) nextTick(()=>sequenceStopButton.value?.focus
         <small>Use the seed 118 size pair for the Day 6 hunter and Day 77 forager scenes. Playback alternates the bright board and cuts camera angles.</small>
       </section>
       <div class="paired-day-controls" aria-label="Independent board controls">
-        <section v-for="(run,index) in runs" :key="index" :class="index===0?'run-left':'run-right'">
+        <section v-for="(run,index) in runs" :key="index" :class="index===0?'run-left':'run-right'"
+          :aria-label="index===0?'Left board controls':'Right board controls'">
           <strong>{{ index===0?'Left':'Right' }} · {{ run.setup.name }}</strong>
           <label>Day <input v-model.number="dayInputs[index]" type="number" min="1" :max="runDays[index]" :aria-label="(index===0?'Left':'Right')+' day'" @change="changeSideDay(index)"> of {{ runDays[index] }}</label>
           <label>Camera <select v-model="cameras[index]" :aria-label="(index===0?'Left':'Right')+' camera angle'" @change="interruptSequence"><option value="board">Field view</option><option value="overhead">Overhead</option><option value="close">Close view</option></select></label>
@@ -368,6 +366,10 @@ watch(sequence,active=>{ if(active) nextTick(()=>sequenceStopButton.value?.focus
             <input v-model.number="fractions[index]" type="range" min="0" max="1" step=".005" :aria-label="(index===0?'Left':'Right')+' playback progress'" :disabled="!tracks[index]" @input="stop(index)">
           </label>
           <span v-if="pending[index]" class="quiet" role="status">Loading Day {{ days[index] }}…</span>
+          <div v-else-if="errors[index]" class="lane-replay-error">
+            <p role="alert">Could not open Day {{ days[index] }} on the {{ index===0?'left':'right' }}. {{ errors[index] }}</p>
+            <button class="secondary" @click="loadTrack(index)">Retry {{ index===0?'left':'right' }} replay</button>
+          </div>
         </section>
       </div>
       <div class="paired-boards" :class="{ 'reveal-boards':reveal }" :style="{ '--divider':divider+'%' }">
@@ -378,10 +380,6 @@ watch(sequence,active=>{ if(active) nextTick(()=>sequenceStopButton.value?.focus
           <h2>{{ run.setup.name }} <small>Day {{ days[index] }} · Seed {{ run.setup.seed }} · {{ format(frames[index]?.time,1) }} s</small></h2>
         </section>
         <button v-if="sequence" ref="sequenceStopButton" class="primary sequence-stop" @click="stopVideoSequence">Stop video sequence</button>
-        <div v-if="pending.some(Boolean)||errors.some(Boolean)" class="stage-note">
-          <p role="status">{{ errors.find(Boolean) || 'Building paired replays…' }}</p>
-          <button v-if="errors.some(Boolean)" class="secondary" @click="retryTracks">Retry replays</button>
-        </div>
       </div>
       <label v-if="reveal" class="compare-reveal">Reveal left and right <input v-model.number="divider" type="range" min="0" max="100"></label>
       <div class="comparison-clock">
