@@ -130,6 +130,7 @@ export const useLab = defineStore('lab', () => {
       if (run.value?.id === value.id) saved.value = count
       if (unsavedRuns.get(value.id) === value) unsavedRuns.delete(value.id)
     }).catch(() => { error.value = 'Local saving is unavailable. You can still export this run.' })
+    return persistQueue
   }
 
   function disconnect() {
@@ -196,14 +197,24 @@ export const useLab = defineStore('lab', () => {
     })
   }
 
+  function showLiveFrame(nextFrame) {
+    if (!replay.value && !batch.value && !loading.value) {
+      frame.value = nextFrame
+      viewing.value = nextFrame.day
+    }
+  }
+
   function receive(data) {
     if (data.type === 'advanced') pending = false
     if (data.type === 'frame') {
       liveFrame.value = data.frame
-      if (!replay.value && !batch.value && !loading.value) {
-        frame.value = data.frame
-        viewing.value = data.frame.day
-      }
+      if (data.partial) {
+        const token = epoch
+        run.value = { ...run.value, partial: data.partial }
+        void persist().then(() => {
+          if (token === epoch && liveFrame.value === data.frame) showLiveFrame(data.frame)
+        })
+      } else showLiveFrame(data.frame)
     }
     if (data.type === 'partial') {
       run.value = { ...run.value, partial: data.partial }
@@ -555,7 +566,7 @@ export const useLab = defineStore('lab', () => {
     if (replay.value) seek(cursor + (track?.stepSeconds ?? DT))
     else if (canEnterLive.value && !loading.value && !pending && frame.value && !dayEnded.value) {
       pending = true
-      writer.postMessage({ type: 'advance', ticks: 1 })
+      writer.postMessage({ type: 'advance', ticks: 1, savePartial: true })
     }
   }
 

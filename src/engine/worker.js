@@ -139,7 +139,10 @@ self.onmessage = async ({ data }) => {
         const state = current()
         const result = step(state, rulesFor(config, records, state.day), data.ticks)
         if (result) settle(result)
-        else emit('frame', { frame: snapshot(state) })
+        else {
+          const frame = snapshot(state)
+          emit('frame', data.savePartial ? { frame, partial: state } : { frame })
+        }
         emit('advanced')
         break
       }

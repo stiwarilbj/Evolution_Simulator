@@ -94,3 +94,4 @@
 
 - Made blobs turn smoothly, stick with promising meals, and briefly remember food they saw. They choose quicker hunts, dodge away from walls, and check that they have time and energy to get back to safety. New Standard runs use these rules. Older runs keep their recorded rules.
 - Smoothed live movement in both board renderers and made replay scrubbing show the selected pose right away. Auto graphics draws less detail on crowded boards. Added tests for steering, playback speed, and replay seeking.
+- Fixed Step one tick so reloading or retrying after a worker crash keeps the paused position. Added browser checks for recovery and for a manual step that finishes a day.

@@ -24,6 +24,31 @@ async function fixedDay(page, seconds = '10') {
   await page.getByRole('spinbutton', { name: 'Seconds per day', exact: true }).fill(seconds)
 }
 
+async function stepTo(page, seconds) {
+  await page.getByRole('button', { name: 'Playback actions' }).click()
+  await page.getByRole('button', { name: 'Step one tick', exact: true }).click()
+  const elapsed = page.getByRole('progressbar', { name: 'Current day elapsed' })
+  await expect.poll(async () => Number(await elapsed.getAttribute('aria-valuenow'))).toBeCloseTo(seconds)
+}
+
+async function savedManualProgress(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open('evolution-simulator', 1)
+    open.onerror = () => reject(open.error)
+    open.onsuccess = () => {
+      const db = open.result
+      const transaction = db.transaction('runs', 'readonly')
+      const get = transaction.objectStore('runs').get(localStorage.getItem('evolution.active'))
+      transaction.onabort = () => { db.close(); reject(transaction.error) }
+      transaction.oncomplete = () => {
+        db.close()
+        const run = get.result
+        resolve(run && { tick: run.partial?.tick ?? null, days: run.summaries.map(row => row.day) })
+      }
+    }
+  }))
+}
+
 async function quickThrough(page, day, trigger = 'Quick Sim') {
   await page.getByRole('button', { name: trigger, exact: true }).click()
   await page.getByRole('button', { name: 'Complete through day' }).click()
@@ -1979,6 +2004,48 @@ test('replay stops at the next live day and the saved results survive a reload',
   await page.getByRole('button', { name: 'Watch last day' }).click()
   await expect(runOptions).toHaveText('Day 10 / 10 · Replay')
   await expect(nextDay).toBeDisabled()
+})
+
+test('manual live steps survive reload and worker retry', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker
+    window.Worker = class extends NativeWorker {
+      postMessage(data) {
+        if (data.type === 'init') window.simulationWriter = this
+        return super.postMessage(data)
+      }
+    }
+  })
+  await openSimulator(page)
+  await startRun(page, '10', () => fixedDay(page))
+  const run = page.getByRole('button', { name: 'Run options' })
+  const elapsed = page.getByRole('progressbar', { name: 'Current day elapsed' })
+  for (let tick = 1; tick <= 3; tick++) await stepTo(page, tick / 10)
+  await expect.poll(() => savedManualProgress(page)).toEqual({ tick: 3, days: [] })
+
+  await page.reload()
+  await expect(run).toHaveText('Day 1 / 10 · Paused')
+  await expect.poll(async () => Number(await elapsed.getAttribute('aria-valuenow'))).toBeCloseTo(0.3)
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled()
+  await stepTo(page, 0.4)
+  await expect.poll(() => savedManualProgress(page)).toEqual({ tick: 4, days: [] })
+
+  await page.evaluate(() => window.simulationWriter.dispatchEvent(new Event('error')))
+  await expect(page.getByRole('alert')).toContainText('resume the unfinished day from its last checkpoint')
+  await page.getByRole('button', { name: 'Retry simulation' }).click()
+  await expect(run).toHaveText('Day 1 / 10 · Paused')
+  await expect.poll(async () => Number(await elapsed.getAttribute('aria-valuenow'))).toBeCloseTo(0.4)
+  await stepTo(page, 0.5)
+})
+
+test('a manual step ending the day saves only the completed result', async ({ page }) => {
+  await openSimulator(page)
+  await startRun(page, '10', () => fixedDay(page, '1'))
+  for (let tick = 1; tick <= 10; tick++) await stepTo(page, tick / 10)
+  await expect.poll(() => savedManualProgress(page)).toEqual({ tick: null, days: [1] })
+  await page.reload()
+  await expect(dayTile(page, 1)).toHaveCount(1)
+  await expect.poll(() => savedManualProgress(page)).toEqual({ tick: null, days: [1] })
 })
 
 test('playback actions disable advancing at dusk and work again on the next day', async ({ page }) => {
