@@ -881,6 +881,86 @@ test('earlier completed days can be branched from the run limit', async ({ page 
   await expect(page.getByText(/Browser test run · branch .* Through Day 9/)).toBeVisible()
 })
 
+async function startDelayedBranch(page) {
+  await delayReplays(page)
+  await openSimulator(page)
+  await startRun(page, '10', () => fixedDay(page))
+  await quickThrough(page, 3)
+  await expect(batchStatus(page, 'Saved through')).toHaveText('Day 3')
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+}
+
+async function openDayTwoBranch(page) {
+  await page.getByRole('button', { name: 'Run options' }).click()
+  await page.getByRole('button', { name: 'Branch here', exact: true }).click()
+  await page.getByLabel('Branch after day').fill('2')
+}
+
+for (const exit of ['Cancel', 'Close settings', 'browser Back']) {
+  test(`a pending branch is discarded on ${exit}`, async ({ page }) => {
+    await startDelayedBranch(page)
+    const sourceId = await page.evaluate(() => localStorage.getItem('evolution.active'))
+    const trends = page.getByRole('link', { name: 'Trends', exact: true })
+    if (exit === 'browser Back') {
+      await trends.click()
+      await page.getByRole('link', { name: 'World', exact: true }).click()
+    }
+    await openDayTwoBranch(page)
+    if (exit === 'Close settings') await page.getByRole('button', { name: 'Edit branch rules' }).click()
+    const submit = page.getByRole('button', { name: 'Create branch', exact: true })
+    await submit.click()
+    await expect(page.getByText('Preparing branch from Day 2…')).toBeVisible()
+    await expect(submit).toBeDisabled()
+    await expect.poll(() => page.evaluate(() => window.replayTest.jobs.has(2))).toBe(true)
+
+    if (exit === 'browser Back') await page.goBack()
+    else {
+      await page.getByRole('button', { name: exit, exact: true }).click()
+      await trends.click()
+    }
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(trends).toHaveAttribute('aria-current', 'page')
+    const trendsUrl = page.url()
+    await finishReplay(page, 2)
+
+    await expect(page).toHaveURL(trendsUrl)
+    expect(await page.evaluate(() => localStorage.getItem('evolution.active'))).toBe(sourceId)
+    await page.reload()
+    await expect(trends).toHaveAttribute('aria-current', 'page')
+    await openRunLibrary(page)
+    const library = page.getByRole('dialog', { name: 'Run Library' })
+    const source = library.locator('article').filter({ has: page.getByText('Browser test run', { exact: true }) })
+    await expect(source).toContainText('Active')
+    await expect(source).toContainText('Saved through Day 3')
+    await expect(library.getByText('Browser test run · branch', { exact: true })).toHaveCount(0)
+  })
+}
+
+test('a failed branch can be retried without duplicating the new run', async ({ page }) => {
+  await startDelayedBranch(page)
+  await openDayTwoBranch(page)
+  const dialog = page.getByRole('dialog', { name: 'Branch here' })
+  const submit = dialog.getByRole('button', { name: 'Create branch', exact: true })
+  await submit.click()
+  await expect(submit).toBeDisabled()
+  await finishReplay(page, 2, 'fail')
+  await expect(dialog.getByRole('alert')).toHaveText('Replay unavailable')
+  await expect(page.getByLabel('Branch after day')).toHaveValue('2')
+  await expect(submit).toBeEnabled()
+
+  await submit.click()
+  await expect(dialog.getByRole('alert')).toHaveCount(0)
+  await finishReplay(page, 2)
+  await expect(page.getByRole('button', { name: 'Run options' })).toHaveText('Day 3 / 10 · Ready')
+  await expect.poll(() => savedManualProgress(page)).toEqual({ tick: null, days: [1, 2] })
+  await openRunLibrary(page)
+  const library = page.getByRole('dialog', { name: 'Run Library' })
+  const branch = library.locator('article').filter({ has: page.getByText('Browser test run · branch', { exact: true }) })
+  await expect(branch).toHaveCount(1)
+  await expect(branch).toContainText('Active')
+  await expect(branch).toContainText('Saved through Day 2')
+})
+
 test('Trends downloads the filtered days and checks that CSV bounds are whole days', async ({ page }) => {
   await openSimulator(page)
   await startRun(page)

@@ -96,3 +96,7 @@
 - Smoothed live movement in both board renderers and made replay scrubbing show the selected pose right away. Auto graphics draws less detail on crowded boards. Added tests for steering, playback speed, and replay seeking.
 - Fixed Step one tick so reloading or retrying after a worker crash keeps the paused position. Added browser checks for recovery and for a manual step that finishes a day.
 - Fixed Compare so one failed replay leaves the other board visible and playable. Each board can retry its own replay without resetting the other one.
+
+## 2026-11-18
+
+- Fixed branches that could save after the user canceled. Both forms show progress, let users retry a failed replay, and keep the current run when canceled.

@@ -81,6 +81,8 @@ export const useLab = defineStore('lab', () => {
   const workerReady = ref(false), connecting = ref(false), workerError = ref('')
   const selected = ref(null), following = ref(false)
   const settings = ref(false), draft = ref(null), modal = ref(null), targetDay = ref(null), branchFrom = ref(null)
+  const branchRequest = shallowRef(null)
+  const branchPreparing = computed(() => branchRequest.value?.day ?? null)
   let openingDraft
   const draftChanged = computed(() => draft.value != null && JSON.stringify(draft.value) !== openingDraft)
   const downloadRange = shallowRef(null)
@@ -264,7 +266,7 @@ export const useLab = defineStore('lab', () => {
     }
   }
 
-  async function useRun(value, newRun = false, restoreDay = null, isCurrent = () => true) {
+  async function useRun(value, newRun = false, restoreDay = null, isCurrent = () => true, onActivate) {
     const switchId = ++runRequest
     cancelReplay()
     const viewRequest = request
@@ -337,6 +339,7 @@ export const useLab = defineStore('lab', () => {
       showReplay(restoredTrack, restoreDay === extinctDay.value ? Infinity : 0, false)
     }
     if (newRun) persist()
+    onActivate?.()
     const connected = await connect(value)
     if (switchId !== runRequest || !isCurrent()) return false
     if (connected && value.setup.mode === 'prepare' && !last(value)) {
@@ -642,6 +645,7 @@ export const useLab = defineStore('lab', () => {
   }
 
   function openSettings(setup, from = null) {
+    cancelBranch()
     if (!settings.value) restorePlay = playing.value
     stopPlayback()
     if (setup || !draft.value || branchFrom.value != null) {
@@ -662,9 +666,17 @@ export const useLab = defineStore('lab', () => {
     Object.assign(draft.value, original)
   }
 
-  function closeSettings() {
+  function closeSettings(resume = true) {
+    cancelBranch()
     settings.value = false
-    if (restorePlay && !playing.value) play()
+    if (resume && restorePlay && !playing.value) play()
+    restorePlay = false
+  }
+
+  function clearSettings() {
+    settings.value = false
+    draft.value = null
+    branchFrom.value = null
     restorePlay = false
   }
 
@@ -674,18 +686,17 @@ export const useLab = defineStore('lab', () => {
     if (fork != null && setup.days <= fork) issues.days = 'The run must continue beyond Day '+fork+'.'
     if (Object.keys(issues).length) return issues
     if (fork != null) {
-      try { if (!await branch(fork,copy(setup))) return {} }
+      try { await branch(fork, copy(setup)) }
       catch (e) { return { branch:e.message } }
+      return {}
     }
-    settings.value = false
-    draft.value = null
-    branchFrom.value = null
-    restorePlay = false
-    if (fork == null) await useRun(makeRun(setup), true)
+    clearSettings()
+    await useRun(makeRun(setup), true)
     return {}
   }
 
   async function switchRun(value, isCurrent, restoreDay) {
+    cancelBranch()
     modal.value = null
     draft.value = null
     return useRun(value, false, restoreDay, isCurrent)
@@ -693,6 +704,7 @@ export const useLab = defineStore('lab', () => {
 
   async function importBranch(setup,revisions) {
     if (Object.keys(validate(setup)).length || !validateRevisions(setup,revisions)) return false
+    cancelBranch()
     const value=makeRun(setup)
     value.revisions=copy(revisions)
     value.forkDay=revisions.at(-1).day-1
@@ -720,26 +732,45 @@ export const useLab = defineStore('lab', () => {
     } catch { error.value = 'Could not remove that saved run.' }
   }
 
+  function cancelBranch() {
+    branchRequest.value = null
+  }
+
   async function branch(day, setup) {
-    if (!run.value || day < 1 || day > latestBranchDay.value || Object.keys(validate(setup)).length) return false
+    if (branchRequest.value || !run.value || day < 1 || day > latestBranchDay.value || Object.keys(validate(setup)).length) return
     const base = run.value
-    const opening = [...base.checkpoints].reverse().find(c => c.day <= day)
-    const after = opening.day === day ? opening : (await getTrack(base, day)).checkpoint
-    const value = { ...makeRun(setup), source: base.id, forkDay: day, latest: after,
-      summaries: base.summaries.filter(r => r.day <= day),
-      checkpoints: [...base.checkpoints.filter(c => c.day < day), { day, ...after }],
-      revisions: [...(base.revisions.length ? base.revisions.filter(r => r.day <= day) : [{ day: 1, setup: base.setup }]),
-        { day: day + 1, setup }],
+    const fromSettings = settings.value
+    const operation = { day }
+    branchRequest.value = operation
+    let activated = false
+    const current = () => branchRequest.value === operation && (fromSettings ? settings.value : modal.value === 'branch')
+    try {
+      const opening = [...base.checkpoints].reverse().find(c => c.day <= day)
+      const after = opening.day === day ? opening : (await getTrack(base, day)).checkpoint
+      if (!current() || run.value?.id !== base.id) return
+      const value = { ...makeRun(setup), source: base.id, forkDay: day, latest: after,
+        summaries: base.summaries.filter(r => r.day <= day),
+        checkpoints: [...base.checkpoints.filter(c => c.day < day), { day, ...after }],
+        revisions: [...(base.revisions.length ? base.revisions.filter(r => r.day <= day) : [{ day: 1, setup: base.setup }]),
+          { day: day + 1, setup }],
+      }
+      const switched = await useRun(value, true, null, () => activated || current(), () => {
+        activated = true
+        cancelBranch()
+        modal.value = null
+        if (fromSettings) clearSettings()
+      })
+      if (switched && setup.mode === 'prepare' && day < setup.days) simulate(setup.days, 'Preparing')
+    } catch (error) {
+      if (current()) throw error
+    } finally {
+      if (branchRequest.value === operation) cancelBranch()
     }
-    modal.value = null
-    const switched = await useRun(value, true)
-    if (switched && setup.mode === 'prepare' && day < setup.days) simulate(setup.days, 'Preparing')
-    return switched
   }
 
   return { run, library, frame, viewing, liveFrame, liveDay, replay, playing, rate, through, scope, loading, batch, saved,
     error, workerReady, connecting, workerError, retrySimulation, replayDay, replayFailure, cancelReplay, retryReplay,
     canEnterLive, canMoveNext, selected, following, settings, draft, modal, completed, extinctDay, latestBranchDay, dayEnded, displayDuration, status, init, openDay, goLive, seek, play,
     stopPlayback, toggleThrough, stepOnce, moveDay, simulate, stopBatch, extend, openSettings, closeSettings, draftChanged, resetDraft, evolve, switchRun, rename,
-    remove, getTrack, branch, prepareOrLive, targetDay, quickForDay, branchFrom, importBranch, preparePair, openDownload, downloadRange }
+    remove, getTrack, branch, cancelBranch, branchPreparing, prepareOrLive, targetDay, quickForDay, branchFrom, importBranch, preparePair, openDownload, downloadRange }
 })

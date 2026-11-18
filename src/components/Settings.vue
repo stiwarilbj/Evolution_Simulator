@@ -93,6 +93,7 @@ function discard() {
   discarding.value=false
 }
 async function apply() {
+  if(applying.value) return
   const errors=validate(draft)
   let setup=draft
   if(draft.scheduleMode==='constant' && errors.schedule) {
@@ -116,8 +117,8 @@ async function apply() {
 onMounted(()=>dialog.value.showModal())
 </script>
 <template>
-  <dialog ref="dialog" class="settings-sheet" aria-labelledby="settings-title" @cancel.prevent="lab.closeSettings">
-    <button class="icon settings-close" aria-label="Close settings" @click="lab.closeSettings"><CircleX :size="26"/></button>
+  <dialog ref="dialog" class="settings-sheet" aria-labelledby="settings-title" @cancel.prevent="lab.closeSettings()">
+    <button class="icon settings-close" aria-label="Close settings" @click="lab.closeSettings()"><CircleX :size="26"/></button>
     <form class="settings-form" novalidate @submit.prevent="apply">
       <header class="settings-intro">
         <h1 id="settings-title">{{ fork==null ? 'Simulation Settings' : 'Branch Settings' }}</h1>
@@ -269,6 +270,7 @@ onMounted(()=>dialog.value.showModal())
         <p>{{ draft.species.filter(s=>s.enabled).length }} enabled species · {{ total }} founders · {{ total ? (draft.food/total).toFixed(2) : '—' }} plants per founder</p>
         <p v-if="lab.draftChanged && fork==null" class="quiet">Draft has changes <button type="button" class="link" @click="discarding=true">Discard changes</button></p>
         <p v-if="discarding">Restore the setup you opened? <button type="button" class="secondary" @click="discard">Discard draft</button> <button type="button" class="link" @click="discarding=false">Keep editing</button></p>
+        <p v-if="lab.branchPreparing!=null" class="quiet" role="status">Preparing branch from Day {{ lab.branchPreparing }}…</p>
         <button type="submit" class="primary evolve" :disabled="applying">{{ fork==null ? 'Evolve!' : 'Create branch' }}</button>
         <small class="quiet">by natural selection</small>
       </footer>
