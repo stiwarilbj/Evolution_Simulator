@@ -100,3 +100,4 @@
 ## 2026-11-18
 
 - Fixed branches that could save after the user canceled. Both forms show progress, let users retry a failed replay, and keep the current run when canceled.
+- Fixed Quick Sim so its preview lists the days it will actually run and skips days that are already done.

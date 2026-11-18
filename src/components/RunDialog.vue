@@ -19,9 +19,23 @@ const branchFood = computed({
 })
 const startProgress=ref(lab.completed), endProgress=ref(lab.completed), resumeLive=ref(false)
 const remaining=computed(()=>1000-lab.run.setup.days)
+const nextDay = computed(() => lab.completed + 1)
 const base=computed(()=>lab.liveFrame?.duration!=null && lab.liveFrame.time>=lab.liveFrame.duration
-  ? lab.completed : Math.min(lab.completed+1,lab.run.setup.days))
+  ? lab.completed : Math.min(nextDay.value,lab.run.setup.days))
 const finish=computed(()=>mode.value==='absolute'?target.value:base.value+amount.value)
+const nextDayLabel = computed(() => {
+  if (lab.extinctDay) return 'Population extinct'
+  if (nextDay.value > lab.run.setup.days) return 'Run complete'
+  return `Day ${nextDay.value}`
+})
+const dayRange = (first, last) => first === last ? `Day ${first}` : `Days ${first}–${last}`
+const quickPreview = computed(() => {
+  const first = nextDay.value, last = finish.value
+  if (last <= lab.completed) return `Day ${last} is ready to watch.`
+  if (base.value < first) return `Complete ${dayRange(first, last)}.`
+  if (first === last) return `Finish Day ${first}.`
+  return `Finish Day ${first}, then complete ${dayRange(first + 1, last)}.`
+})
 const scopeLabel=computed(()=>lab.run.setup.species.find(s=>s.id===lab.scope)?.name ?? 'All species')
 const rows=computed(()=>lab.run.summaries.map(s=>s.rows[lab.scope]).filter(Boolean))
 const matches=computed(()=>[...lab.library].sort((a,b)=>b.created-a.created).filter(r=>r.setup.name.toLowerCase().includes(search.value.toLowerCase())))
@@ -128,11 +142,11 @@ onMounted(()=>dialog.value.showModal())
       <p>Advance the active run without animation.</p>
       <div class="split-options"><button class="secondary" :aria-pressed="mode==='additional'" @click="mode='additional'">Additional generations</button>
         <button class="secondary" :aria-pressed="mode==='absolute'" @click="mode='absolute'">Complete through day</button></div>
-      <dl class="pair-readout"><dt>Watching</dt><dd>Day {{ lab.viewing }}</dd><dt>Computing</dt><dd>{{ lab.completed>=lab.run.setup.days?'Finished':'Day '+base }}</dd><dt>Saved through</dt><dd>Day {{ lab.saved }}</dd></dl>
+      <dl class="pair-readout"><dt>Watching</dt><dd>Day {{ lab.viewing }}</dd><dt>Next day to simulate</dt><dd>{{ nextDayLabel }}</dd><dt>Saved through</dt><dd>Day {{ lab.saved }}</dd></dl>
       <label v-if="mode==='additional'" class="dialog-field">Additional generations <input v-model.number="amount" type="number" min="0" :max="lab.run.setup.days-base"></label>
       <label v-else class="dialog-field">Target day <input v-model.number="target" type="number" min="1" :max="lab.run.setup.days"></label>
       <p v-if="finish>lab.run.setup.days" class="issue">The current limit is Day {{ lab.run.setup.days }}.</p>
-      <p v-else-if="canSim" class="destination">{{ finish<=lab.completed?'Day '+finish+' is ready to watch.':finish===base?'Finish Day '+finish:'Finish Day '+base+', then complete Days '+(base+1)+'–'+finish }}</p>
+      <p v-else-if="canSim" class="destination">{{ quickPreview }}</p>
       <footer><button class="secondary" @click="close">Cancel</button>
         <button v-if="finish>lab.run.setup.days && !lab.extinctDay" class="primary" @click="lab.modal='extend'">More Generations</button>
         <button v-else class="primary" :disabled="!canSim || finish>lab.completed && !lab.workerReady" @click="simulate"><FastForward v-if="finish>lab.completed" :size="16"/>{{ finish<=lab.completed?'Watch Day '+finish:'Simulate' }}</button>
